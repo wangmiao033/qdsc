@@ -723,6 +723,7 @@ export default function WorkflowApp() {
           <ProductionBoardView
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
+            onNavigateToIconCrop={() => setActiveTab('iconCrop')}
           />
         )}
         {activeTab === 'specs' && (

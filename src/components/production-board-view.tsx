@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle, Clock, Loader2,
   Plus, ArrowRight, Layers, Zap, Target, Database, Package, Play,
   Search, Filter, BarChart3, Check, Copy, Download, XCircle, Info,
-  Upload, RotateCcw, Eye, Star
+  Upload, RotateCcw, Eye, Star, Scissors, Sparkles, TrendingUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -168,10 +168,12 @@ function resolveDbChannels(main: string, aliases: string[], dbChannels: string[]
 // ========== Production Board Component ==========
 export default function ProductionBoardView({
   onBatchChange,
-  onRefresh
+  onRefresh,
+  onNavigateToIconCrop
 }: {
   onBatchChange: (id: string) => void
   onRefresh: () => void
+  onNavigateToIconCrop?: () => void
 }) {
   const [step, setStep] = useState(1) // 1=渠道准备, 2=快速建任务, 3=制作看板, 4=交付总览
   const [boardData, setBoardData] = useState<BoardData | null>(null)
@@ -188,6 +190,7 @@ export default function ProductionBoardView({
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [copied, setCopied] = useState(false)
+  const [smartSort, setSmartSort] = useState(false)
   const { toast } = useToast()
 
   // Load board data
@@ -385,10 +388,62 @@ export default function ProductionBoardView({
         completed: items.filter(t => t.status === '已完成').length,
       }))
       .sort((a, b) => {
-        // Shared sizes first
+        if (smartSort) {
+          // Sort by impact: most pending tasks first (completing this covers the most work)
+          const aPending = a.tasks.filter(t => t.status !== '已完成').length
+          const bPending = b.tasks.filter(t => t.status !== '已完成').length
+          if (bPending !== aPending) return bPending - aPending
+          return b.tasks.length - a.tasks.length
+        }
+        // Default: shared sizes first
         if (b.tasks.length !== a.tasks.length) return b.tasks.length - a.tasks.length
         return (b.width * b.height) - (a.width * a.height)
       })
+  })()
+
+  // Smart guide data (from ALL tasks, not filtered - for the production guide)
+  const smartGuideData = (() => {
+    const groups = new Map<string, TaskItem[]>()
+    for (const t of tasks) {
+      if (t.status === '已完成') continue
+      const key = `${t.specWidth}x${t.specHeight}_${t.specFormat}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(t)
+    }
+    return [...groups.entries()]
+      .map(([key, items]) => {
+        const pending = items.filter(t => t.status !== '已完成')
+        const channels = [...new Set(items.map(t => t.specChannel))]
+        return {
+          key,
+          width: items[0].specWidth,
+          height: items[0].specHeight,
+          format: items[0].specFormat,
+          channelCount: channels.length,
+          pendingCount: pending.length,
+          totalCount: items.length,
+          channels,
+          taskIds: items.map(t => t.id),
+        }
+      })
+      .sort((a, b) => {
+        if (b.channelCount !== a.channelCount) return b.channelCount - a.channelCount
+        return b.pendingCount - a.pendingCount
+      })
+  })()
+
+  // Dimension-format map for format linking (same WxH, different format)
+  const dimensionFormatMap = (() => {
+    const map = new Map<string, Array<{format: string, key: string}>>()
+    for (const t of tasks) {
+      const dimKey = `${t.specWidth}x${t.specHeight}`
+      if (!map.has(dimKey)) map.set(dimKey, [])
+      const existing = map.get(dimKey)!
+      if (!existing.find(f => f.format === t.specFormat)) {
+        existing.push({ format: t.specFormat, key: `${dimKey}_${t.specFormat}` })
+      }
+    }
+    return map
   })()
 
   // Group tasks by channel
@@ -912,6 +967,80 @@ export default function ProductionBoardView({
               <Progress value={completionRate} className="h-2" />
             </Card>
 
+            {/* 制作引导 Panel */}
+            {smartGuideData.length > 0 && (
+              <Card className="border-amber-200 dark:border-amber-800 bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-950/20 dark:to-orange-950/20">
+                <CardHeader className="py-3 px-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-amber-600" />
+                      <CardTitle className="text-sm">制作引导</CardTitle>
+                      <CardDescription className="text-xs">
+                        按影响力排序 · 优先进制覆盖最多渠道的尺寸 · 共 {smartGuideData.length} 个待制尺寸
+                      </CardDescription>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      剩余 {taskStats.pending + taskStats.inProgress} 个待办
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 pb-3">
+                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                    {smartGuideData.map((item, idx) => (
+                      <div
+                        key={item.key}
+                        className={`flex items-center gap-2 p-2 rounded-md text-xs transition-colors ${
+                          idx === 0
+                            ? 'bg-amber-100/80 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700'
+                            : 'bg-white/60 dark:bg-white/5 border border-transparent hover:border-muted'
+                        }`}
+                      >
+                        {idx === 0 && (
+                          <Badge className="bg-amber-200 text-amber-800 hover:bg-amber-200 text-[9px] px-1.5 py-0 shrink-0">
+                            优先
+                          </Badge>
+                        )}
+                        <span className="font-mono font-semibold shrink-0">{item.width}x{item.height}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{item.format}</Badge>
+                        <span className="text-muted-foreground shrink-0">
+                          覆盖 <span className="font-medium text-foreground">{item.channelCount}</span> 渠道
+                        </span>
+                        <span className="text-muted-foreground shrink-0">
+                          <span className="font-medium text-amber-600">{item.pendingCount}</span> 待完成
+                        </span>
+                        <div className="flex-1" />
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[9px] px-1.5 py-0 shrink-0">
+                          1图→{item.pendingCount}任务
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] h-6 px-2 shrink-0"
+                          onClick={() => {
+                            const pendingIds = tasks
+                              .filter(t => {
+                                const k = `${t.specWidth}x${t.specHeight}_${t.specFormat}`
+                                return k === item.key && t.status !== '已完成'
+                              })
+                              .map(t => t.id)
+                            if (pendingIds.length > 0) {
+                              handleBatchStatusUpdate(pendingIds, '已完成')
+                              toast({
+                                title: '已完成',
+                                description: `${item.width}x${item.height} ${item.format} - ${pendingIds.length}个渠道的任务已标记完成！`
+                              })
+                            }
+                          }}
+                        >
+                          <CheckCircle2 className="h-3 w-3 mr-0.5" />一键完成
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Filters */}
             <Card className="p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -968,6 +1097,22 @@ export default function ProductionBoardView({
                     </Select>
                   </div>
                 )}
+                {viewMode === 'bySize' && (
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs text-muted-foreground">排序:</Label>
+                    <button
+                      onClick={() => setSmartSort(!smartSort)}
+                      className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors ${
+                        smartSort
+                          ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700'
+                          : 'border-muted hover:border-muted-foreground/30 text-muted-foreground'
+                      }`}
+                    >
+                      <TrendingUp className="h-3 w-3" />
+                      {smartSort ? '智能排序' : '默认排序'}
+                    </button>
+                  </div>
+                )}
                 <div className="flex-1" />
                 <div className="relative">
                   <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -992,11 +1137,18 @@ export default function ProductionBoardView({
                 {tasksBySize.map(group => {
                   const rate = group.tasks.length > 0 ? Math.round((group.completed / group.tasks.length) * 100) : 0
                   const isShared = group.tasks.length > 1
+                  const pendingIds = group.tasks
+                    .filter(t => t.status === '待制作' || t.status === '制作中')
+                    .map(t => t.id)
+                  const hasPending = pendingIds.length > 0
+                  const dimKey = `${group.width}x${group.height}`
+                  const sameDimFormats = dimensionFormatMap.get(dimKey) || []
+                  const otherFormats = sameDimFormats.filter(f => f.format !== group.format)
                   return (
-                    <Card key={group.key}>
+                    <Card key={group.key} className={hasPending ? '' : 'opacity-70'}>
                       <CardHeader className="py-2.5 px-4">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Badge className={`text-xs px-2 ${
                               isShared
                                 ? 'bg-amber-100 text-amber-700 hover:bg-amber-100'
@@ -1006,26 +1158,59 @@ export default function ProductionBoardView({
                             </Badge>
                             <span className="font-mono font-semibold text-sm">{group.width}x{group.height}</span>
                             <Badge variant="secondary" className="text-[10px] px-1.5">{group.format}</Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{group.completed}/{group.tasks.length} 完成</span>
-                            <Progress value={rate} className="h-1.5 w-20" />
-                            {isShared && group.completed < group.tasks.length && group.completed > 0 && (
-                              <Button
+                            {otherFormats.length > 0 && (
+                              <Badge
                                 variant="outline"
-                                size="sm"
-                                className="text-[10px] h-6 px-2"
-                                onClick={() => {
-                                  const pendingIds = group.tasks
-                                    .filter(t => t.status === '待制作' || t.status === '制作中')
-                                    .map(t => t.id)
-                                  if (pendingIds.length > 0) {
-                                    handleBatchStatusUpdate(pendingIds, '已完成')
-                                  }
-                                }}
+                                className="text-[9px] px-1.5 py-0 text-purple-600 border-purple-300 dark:text-purple-400 dark:border-purple-700 cursor-default"
                               >
-                                <CheckCircle2 className="h-3 w-3 mr-1" />全部完成
-                              </Button>
+                                同尺寸另有: {dimKey} {otherFormats.map(f => f.format).join('/')}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground">{group.completed}/{group.tasks.length}</span>
+                            <Progress value={rate} className="h-1.5 w-16" />
+                            {hasPending && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-[10px] h-6 px-2"
+                                  onClick={() => {
+                                    handleBatchStatusUpdate(pendingIds, '已完成')
+                                    toast({
+                                      title: '已完成',
+                                      description: `${group.width}x${group.height} ${group.format} - ${pendingIds.length}个渠道的任务已标记完成！`
+                                    })
+                                  }}
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5" />一键完成此尺寸 ({pendingIds.length})
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-[10px] h-6 px-2 text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950/30"
+                                  onClick={() => {
+                                    // Store crop sizes to localStorage for IconCrop to pick up
+                                    const existingSizes = JSON.parse(localStorage.getItem('qdsc_crop_sizes') || '[]')
+                                    const newSize = { width: group.width, height: group.height, format: group.format }
+                                    const merged = [...existingSizes.filter((s: {width: number, height: number, format: string}) =>
+                                      !(s.width === newSize.width && s.height === newSize.height && s.format === newSize.format)
+                                    ), newSize]
+                                    localStorage.setItem('qdsc_crop_sizes', JSON.stringify(merged))
+                                    navigator.clipboard.writeText(`${group.width}x${group.height} ${group.format}`)
+                                    toast({
+                                      title: '已复制并跳转',
+                                      description: `${group.width}x${group.height} ${group.format} 已复制到剪贴板，正在跳转到裁剪工具...`
+                                    })
+                                    if (onNavigateToIconCrop) {
+                                      onNavigateToIconCrop()
+                                    }
+                                  }}
+                                >
+                                  <Scissors className="h-3 w-3 mr-0.5" />去裁剪
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>

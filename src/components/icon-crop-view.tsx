@@ -452,6 +452,36 @@ export default function IconCropView() {
   const [specSizes, setSpecSizes] = useState<SizeOption[]>([])
   const [zipStructure, setZipStructure] = useState<ZipStructure>('byFile')
 
+  // Read preset sizes from production board (localStorage bridge)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('qdsc_crop_sizes')
+      if (stored) {
+        const sizes: Array<{width: number; height: number; format?: string}> = JSON.parse(stored)
+        if (Array.isArray(sizes) && sizes.length > 0) {
+          const newSizes: SizeOption[] = sizes
+            .filter(s => s.width > 0 && s.height > 0)
+            .map(s => ({
+              label: `${s.width}x${s.height}`,
+              width: s.width,
+              height: s.height,
+              group: '生产看板预设',
+            }))
+          setCustomSizes(prev => {
+            const existingLabels = new Set(prev.map(s => s.label))
+            const unique = newSizes.filter(s => !existingLabels.has(s.label))
+            return unique.length > 0 ? [...prev, ...unique] : prev
+          })
+          localStorage.removeItem('qdsc_crop_sizes') // Clean up after reading
+          toast({
+            title: `已加载 ${newSizes.length} 个预设尺寸`,
+            description: '来自生产看板的尺寸已添加到输出列表',
+          })
+        }
+      }
+    } catch {}
+  }, [])
+
   // Generation state
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
