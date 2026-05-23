@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   LayoutDashboard, Database, ListChecks, ClipboardCheck, FileDown, FileUp,
   Plus, Pencil, Trash2, Search, Filter, ChevronLeft, ChevronRight,
   AlertTriangle, CheckCircle2, XCircle, Info, Copy, Check, Download,
   Upload, Loader2, BarChart3, Clock, AlertOctagon, X, Layers, Zap, Target, ArrowRight, ArrowDown,
   FileSearch, RefreshCw, FileText, ImagePlus, FileImage, Eye, ScrollText,
-  Star, Settings
+  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,7 +30,10 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 
 // ========== Types ==========
 interface MaterialSpec {
@@ -669,6 +672,7 @@ export default function WorkflowApp() {
             { id: 'tasks', label: '任务生成器', icon: ListChecks },
             { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
             { id: 'logs', label: '更新日志', icon: ScrollText },
+            { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
           ].map(item => (
             <button
               key={item.id}
@@ -738,7 +742,907 @@ export default function WorkflowApp() {
         {activeTab === 'logs' && (
           <LogsView batchId={currentBatchId} onRefresh={refreshAll} />
         )}
+        {activeTab === 'iconCrop' && (
+          <IconCropView />
+        )}
       </main>
+    </div>
+  )
+}
+
+// ========== Icon Crop View ==========
+interface UploadedFile {
+  id: string
+  file: File
+  name: string
+  width: number
+  height: number
+  size: number
+  img: HTMLImageElement
+  dataUrl: string
+}
+
+interface SizeOption {
+  label: string
+  width: number
+  height: number
+  group: string
+}
+
+const APP_ICON_SIZES: SizeOption[] = [
+  { label: '1024x1024', width: 1024, height: 1024, group: '常用 App Icon' },
+  { label: '512x512', width: 512, height: 512, group: '常用 App Icon' },
+  { label: '192x192', width: 192, height: 192, group: '常用 App Icon' },
+  { label: '180x180', width: 180, height: 180, group: '常用 App Icon' },
+  { label: '152x152', width: 152, height: 152, group: '常用 App Icon' },
+  { label: '144x144', width: 144, height: 144, group: '常用 App Icon' },
+  { label: '120x120', width: 120, height: 120, group: '常用 App Icon' },
+  { label: '96x96', width: 96, height: 96, group: '常用 App Icon' },
+  { label: '72x72', width: 72, height: 72, group: '常用 App Icon' },
+  { label: '64x64', width: 64, height: 64, group: '常用 App Icon' },
+  { label: '48x48', width: 48, height: 48, group: '常用 App Icon' },
+  { label: '36x36', width: 36, height: 36, group: '常用 App Icon' },
+]
+
+const GAME_CHANNEL_SIZES: SizeOption[] = [
+  { label: '512x512', width: 512, height: 512, group: '游戏渠道常用' },
+  { label: '256x256', width: 256, height: 256, group: '游戏渠道常用' },
+  { label: '200x200', width: 200, height: 200, group: '游戏渠道常用' },
+  { label: '180x180', width: 180, height: 180, group: '游戏渠道常用' },
+  { label: '167x167', width: 167, height: 167, group: '游戏渠道常用' },
+  { label: '152x152', width: 152, height: 152, group: '游戏渠道常用' },
+  { label: '144x144', width: 144, height: 144, group: '游戏渠道常用' },
+  { label: '128x128', width: 128, height: 128, group: '游戏渠道常用' },
+  { label: '120x120', width: 120, height: 120, group: '游戏渠道常用' },
+  { label: '108x108', width: 108, height: 108, group: '游戏渠道常用' },
+  { label: '96x96', width: 96, height: 96, group: '游戏渠道常用' },
+  { label: '90x90', width: 90, height: 90, group: '游戏渠道常用' },
+  { label: '80x80', width: 80, height: 80, group: '游戏渠道常用' },
+  { label: '72x72', width: 72, height: 72, group: '游戏渠道常用' },
+  { label: '64x64', width: 64, height: 64, group: '游戏渠道常用' },
+  { label: '48x48', width: 48, height: 48, group: '游戏渠道常用' },
+  { label: '36x36', width: 36, height: 36, group: '游戏渠道常用' },
+]
+
+const BANNER_SIZES: SizeOption[] = [
+  { label: '1200x628', width: 1200, height: 628, group: 'Banner / 推广图' },
+  { label: '1080x1920', width: 1080, height: 1920, group: 'Banner / 推广图' },
+  { label: '750x1334', width: 750, height: 1334, group: 'Banner / 推广图' },
+  { label: '1920x1080', width: 1920, height: 1080, group: 'Banner / 推广图' },
+  { label: '1280x720', width: 1280, height: 720, group: 'Banner / 推广图' },
+  { label: '960x540', width: 960, height: 540, group: 'Banner / 推广图' },
+  { label: '800x480', width: 800, height: 480, group: 'Banner / 推广图' },
+  { label: '640x960', width: 640, height: 960, group: 'Banner / 推广图' },
+  { label: '480x800', width: 480, height: 800, group: 'Banner / 推广图' },
+]
+
+function autoTrimImage(
+  imageData: ImageData,
+  tolerance: number,
+  padding: number
+): { trimmed: ImageData; originalBounds: { x: number; y: number; w: number; h: number }; trimmedBounds: { x: number; y: number; w: number; h: number } } {
+  const { width, height, data } = imageData
+  const threshold = tolerance * 5
+  let top = height, bottom = 0, left = width, right = 0
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const a = data[i + 3]
+      const r = data[i]
+      const g = data[i + 1]
+      const b = data[i + 2]
+      const isBackground = a < threshold || (r > 255 - threshold && g > 255 - threshold && b > 255 - threshold)
+      if (!isBackground) {
+        if (y < top) top = y
+        if (y > bottom) bottom = y
+        if (x < left) left = x
+        if (x > right) right = x
+      }
+    }
+  }
+
+  if (top > bottom || left > right) {
+    top = 0; bottom = height - 1; left = 0; right = width - 1
+  }
+
+  const originalBounds = { x: left, y: top, w: right - left + 1, h: bottom - top + 1 }
+
+  const padTop = Math.min(padding, top)
+  const padBottom = Math.min(padding, height - 1 - bottom)
+  const padLeft = Math.min(padding, left)
+  const padRight = Math.min(padding, width - 1 - right)
+
+  const tLeft = left - padLeft
+  const tTop = top - padTop
+  const tW = (right - left + 1) + padLeft + padRight
+  const tH = (bottom - top + 1) + padTop + padBottom
+
+  const trimmedBounds = { x: tLeft, y: tTop, w: tW, h: tH }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = tW
+  canvas.height = tH
+  const ctx = canvas.getContext('2d')!
+  const trimmed = ctx.createImageData(tW, tH)
+
+  for (let y = 0; y < tH; y++) {
+    for (let x = 0; x < tW; x++) {
+      const srcIdx = ((tTop + y) * width + (tLeft + x)) * 4
+      const dstIdx = (y * tW + x) * 4
+      trimmed.data[dstIdx] = data[srcIdx]
+      trimmed.data[dstIdx + 1] = data[srcIdx + 1]
+      trimmed.data[dstIdx + 2] = data[srcIdx + 2]
+      trimmed.data[dstIdx + 3] = data[srcIdx + 3]
+    }
+  }
+
+  return { trimmed, originalBounds, trimmedBounds }
+}
+
+function resizeImage(
+  sourceCanvas: HTMLCanvasElement,
+  targetWidth: number,
+  targetHeight: number,
+  mode: 'contain' | 'cover' | 'stretch',
+  format: string,
+  quality: number
+): Promise<Blob> {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+    const ctx = canvas.getContext('2d')!
+
+    if (format === 'image/png') {
+      ctx.clearRect(0, 0, targetWidth, targetHeight)
+    }
+
+    const srcW = sourceCanvas.width
+    const srcH = sourceCanvas.height
+
+    if (mode === 'stretch') {
+      ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
+    } else if (mode === 'contain') {
+      const scale = Math.min(targetWidth / srcW, targetHeight / srcH)
+      const drawW = srcW * scale
+      const drawH = srcH * scale
+      const offsetX = (targetWidth - drawW) / 2
+      const offsetY = (targetHeight - drawH) / 2
+      ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
+    } else {
+      const scale = Math.max(targetWidth / srcW, targetHeight / srcH)
+      const drawW = srcW * scale
+      const drawH = srcH * scale
+      const offsetX = (targetWidth - drawW) / 2
+      const offsetY = (targetHeight - drawH) / 2
+      ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
+    }
+
+    canvas.toBlob(
+      (blob) => resolve(blob!),
+      format,
+      quality
+    )
+  })
+}
+
+function IconCropView() {
+  const { toast } = useToast()
+  const [files, setFiles] = useState<UploadedFile[]>([])
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  const [padding, setPadding] = useState(0)
+  const [tolerance, setTolerance] = useState(10)
+  const [outputFormat, setOutputFormat] = useState('image/png')
+  const [outputQuality, setOutputQuality] = useState(0.92)
+  const [scaleMode, setScaleMode] = useState<'contain' | 'cover' | 'stretch'>('contain')
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set())
+  const [customWidth, setCustomWidth] = useState('')
+  const [customHeight, setCustomHeight] = useState('')
+  const [customSizes, setCustomSizes] = useState<SizeOption[]>([])
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [progressTotal, setProgressTotal] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const allSizes = [...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes]
+
+  const sizeGroups = useCallback(() => {
+    const groups: Record<string, SizeOption[]> = {}
+    for (const s of allSizes) {
+      if (!groups[s.group]) groups[s.group] = []
+      if (!groups[s.group].find(e => e.label === s.label)) {
+        groups[s.group].push(s)
+      }
+    }
+    return groups
+  }, [allSizes.length])
+
+  const handleFiles = useCallback(async (fileList: FileList | File[]) => {
+    const accepted = Array.from(fileList).filter(f =>
+      ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(f.type)
+    )
+    const newFiles: UploadedFile[] = []
+    for (const file of accepted) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsDataURL(file)
+      })
+      const img = await new Promise<HTMLImageElement>((resolve) => {
+        const i = new Image()
+        i.onload = () => resolve(i)
+        i.src = dataUrl
+      })
+      newFiles.push({
+        id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        file,
+        name: file.name,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        size: file.size,
+        img,
+        dataUrl,
+      })
+    }
+    setFiles(prev => [...prev, ...newFiles])
+    if (newFiles.length > 0) {
+      setSelectedFileIds(prev => {
+        const next = new Set(prev)
+        for (const f of newFiles) next.add(f.id)
+        return next
+      })
+      if (!previewFileId) {
+        setPreviewFileId(newFiles[0].id)
+      }
+    }
+  }, [previewFileId])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    handleFiles(e.dataTransfer.files)
+  }, [handleFiles])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+
+  const removeFile = useCallback((id: string) => {
+    setFiles(prev => prev.filter(f => f.id !== id))
+    setSelectedFileIds(prev => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    if (previewFileId === id) {
+      setPreviewFileId(null)
+    }
+  }, [previewFileId])
+
+  const toggleSelectFile = useCallback((id: string) => {
+    setSelectedFileIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSize = useCallback((key: string) => {
+    setSelectedSizes(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const selectAllGroup = useCallback((group: string) => {
+    setSelectedSizes(prev => {
+      const next = new Set(prev)
+      const groupSizes = allSizes.filter(s => s.group === group)
+      const allSelected = groupSizes.every(s => next.has(s.label))
+      for (const s of groupSizes) {
+        if (allSelected) next.delete(s.label)
+        else next.add(s.label)
+      }
+      return next
+    })
+  }, [allSizes])
+
+  const addCustomSize = useCallback(() => {
+    const w = parseInt(customWidth)
+    const h = parseInt(customHeight)
+    if (!w || !h || w <= 0 || h <= 0) {
+      toast({ title: '请输入有效的宽高', variant: 'destructive' })
+      return
+    }
+    const label = `${w}x${h}`
+    if (customSizes.find(s => s.label === label)) {
+      toast({ title: '该尺寸已存在', variant: 'destructive' })
+      return
+    }
+    setCustomSizes(prev => [...prev, { label, width: w, height: h, group: '自定义尺寸' }])
+    setCustomWidth('')
+    setCustomHeight('')
+  }, [customWidth, customHeight, customSizes, toast])
+
+  const removeCustomSize = useCallback((label: string) => {
+    setCustomSizes(prev => prev.filter(s => s.label !== label))
+    setSelectedSizes(prev => {
+      const next = new Set(prev)
+      next.delete(label)
+      return next
+    })
+  }, [])
+
+  const getFormatExt = (format: string) => {
+    if (format === 'image/png') return 'png'
+    if (format === 'image/jpeg') return 'jpg'
+    if (format === 'image/webp') return 'webp'
+    return 'png'
+  }
+
+  const computeTrimResult = useCallback((fileId: string) => {
+    const f = files.find(x => x.id === fileId)
+    if (!f) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = f.width
+    canvas.height = f.height
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(f.img, 0, 0)
+    const imageData = ctx.getImageData(0, 0, f.width, f.height)
+    const result = autoTrimImage(imageData, tolerance, padding)
+    return { originalBounds: result.originalBounds, trimmedBounds: result.trimmedBounds }
+  }, [files, tolerance, padding])
+
+  const trimResult = previewFileId ? computeTrimResult(previewFileId) : null
+
+  const handleGenerate = useCallback(async () => {
+    const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
+    const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
+    if (selectedFiles.length === 0) {
+      toast({ title: '请至少选择一张图片', variant: 'destructive' })
+      return
+    }
+    if (selectedSizeOptions.length === 0) {
+      toast({ title: '请至少选择一个输出尺寸', variant: 'destructive' })
+      return
+    }
+
+    setGenerating(true)
+    const totalOps = selectedFiles.length * selectedSizeOptions.length
+    setProgressTotal(totalOps)
+    setProgress(0)
+
+    try {
+      if (totalOps === 1) {
+        const f = selectedFiles[0]
+        const s = selectedSizeOptions[0]
+        const srcCanvas = document.createElement('canvas')
+        srcCanvas.width = f.width
+        srcCanvas.height = f.height
+        const ctx = srcCanvas.getContext('2d')!
+        ctx.drawImage(f.img, 0, 0)
+        const imageData = ctx.getImageData(0, 0, f.width, f.height)
+        const { trimmed } = autoTrimImage(imageData, tolerance, padding)
+
+        const trimmedCanvas = document.createElement('canvas')
+        trimmedCanvas.width = trimmed.width
+        trimmedCanvas.height = trimmed.height
+        const tCtx = trimmedCanvas.getContext('2d')!
+        tCtx.putImageData(trimmed, 0, 0)
+
+        const blob = await resizeImage(trimmedCanvas, s.width, s.height, scaleMode, outputFormat, outputQuality)
+        const ext = getFormatExt(outputFormat)
+        const baseName = f.name.replace(/\.[^.]+$/, '')
+        saveAs(blob, `${baseName}_${s.width}x${s.height}.${ext}`)
+        toast({ title: '下载完成' })
+      } else {
+        const zip = new JSZip()
+        let done = 0
+        for (const f of selectedFiles) {
+          const srcCanvas = document.createElement('canvas')
+          srcCanvas.width = f.width
+          srcCanvas.height = f.height
+          const ctx = srcCanvas.getContext('2d')!
+          ctx.drawImage(f.img, 0, 0)
+          const imageData = ctx.getImageData(0, 0, f.width, f.height)
+          const { trimmed } = autoTrimImage(imageData, tolerance, padding)
+
+          const trimmedCanvas = document.createElement('canvas')
+          trimmedCanvas.width = trimmed.width
+          trimmedCanvas.height = trimmed.height
+          const tCtx = trimmedCanvas.getContext('2d')!
+          tCtx.putImageData(trimmed, 0, 0)
+
+          const baseName = f.name.replace(/\.[^.]+$/, '')
+          for (const s of selectedSizeOptions) {
+            const blob = await resizeImage(trimmedCanvas, s.width, s.height, scaleMode, outputFormat, outputQuality)
+            const ext = getFormatExt(outputFormat)
+            zip.file(`${baseName}/${baseName}_${s.width}x${s.height}.${ext}`, blob)
+            done++
+            setProgress(done)
+          }
+        }
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        saveAs(zipBlob, `icon_crop_${Date.now()}.zip`)
+        toast({ title: `已生成 ${done} 个文件并打包下载` })
+      }
+    } catch (err) {
+      toast({ title: '生成失败', description: String(err), variant: 'destructive' })
+    }
+    setGenerating(false)
+    setProgress(0)
+    setProgressTotal(0)
+  }, [files, selectedFileIds, selectedSizes, allSizes, tolerance, padding, scaleMode, outputFormat, outputQuality, toast])
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
+  const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
+  const totalOutput = selectedFiles.length * selectedSizeOptions.length
+
+  return (
+    <div className="p-4 space-y-4 max-w-7xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Icon 裁剪</h2>
+          <p className="text-xs text-muted-foreground">上传图标，自动去除透明/白色边框，批量输出多尺寸</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left: Upload & File List */}
+        <div className="lg:col-span-1 space-y-4">
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm">上传图片</CardTitle>
+              <CardDescription className="text-xs">支持 PNG, JPG, WebP, GIF，可多选</CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <div
+                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <div className="text-sm font-medium">拖拽图片到此处，或点击上传</div>
+                <div className="text-xs text-muted-foreground mt-1">PNG / JPG / WebP / GIF</div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                className="hidden"
+                onChange={e => {
+                  if (e.target.files) handleFiles(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          {files.length > 0 && (
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">已上传 ({files.length})</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      setFiles([])
+                      setSelectedFileIds(new Set())
+                      setPreviewFileId(null)
+                    }}
+                  >
+                    清空
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                  {files.map(f => (
+                    <div
+                      key={f.id}
+                      className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-xs ${
+                        previewFileId === f.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-transparent hover:bg-muted/50'
+                      }`}
+                      onClick={() => setPreviewFileId(f.id)}
+                    >
+                      <Checkbox
+                        checked={selectedFileIds.has(f.id)}
+                        onCheckedChange={() => toggleSelectFile(f.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="shrink-0"
+                      />
+                      <img
+                        src={f.dataUrl}
+                        alt={f.name}
+                        className="w-8 h-8 object-contain rounded border bg-muted/30 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{f.name}</div>
+                        <div className="text-muted-foreground">{f.width}x{f.height} · {formatFileSize(f.size)}</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0"
+                        onClick={e => {
+                          e.stopPropagation()
+                          removeFile(f.id)
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Middle: Settings */}
+        <div className="lg:col-span-1 space-y-4">
+          {/* Auto-Trim Settings */}
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Crop className="h-4 w-4" />
+                自动裁剪设置
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">内边距 (Padding)</Label>
+                  <span className="text-xs font-mono text-muted-foreground">{padding}px</span>
+                </div>
+                <Slider
+                  value={[padding]}
+                  min={0}
+                  max={50}
+                  step={1}
+                  onValueChange={v => setPadding(v[0])}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">容差 (Tolerance)</Label>
+                  <span className="text-xs font-mono text-muted-foreground">{tolerance}</span>
+                </div>
+                <Slider
+                  value={[tolerance]}
+                  min={1}
+                  max={50}
+                  step={1}
+                  onValueChange={v => setTolerance(v[0])}
+                />
+                <p className="text-[10px] text-muted-foreground">越高越积极去除边框背景色</p>
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label className="text-xs">输出格式</Label>
+                <Select value={outputFormat} onValueChange={v => setOutputFormat(v)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="image/png">PNG</SelectItem>
+                    <SelectItem value="image/jpeg">JPG</SelectItem>
+                    <SelectItem value="image/webp">WebP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {outputFormat !== 'image/png' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">输出质量</Label>
+                    <span className="text-xs font-mono text-muted-foreground">{Math.round(outputQuality * 100)}%</span>
+                  </div>
+                  <Slider
+                    value={[outputQuality]}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    onValueChange={v => setOutputQuality(v[0])}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Scale Mode */}
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Maximize2 className="h-4 w-4" />
+                缩放模式
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {([
+                { value: 'contain' as const, label: '等比适应 (Contain)', desc: '保持比例，空白填充透明背景' },
+                { value: 'cover' as const, label: '等比填充 (Cover)', desc: '保持比例，裁剪溢出部分' },
+                { value: 'stretch' as const, label: '拉伸填充 (Stretch)', desc: '强制拉伸到目标尺寸' },
+              ]).map(m => (
+                <button
+                  key={m.value}
+                  onClick={() => setScaleMode(m.value)}
+                  className={`w-full text-left p-2 rounded-md border text-xs transition-colors ${
+                    scaleMode === m.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="font-medium">{m.label}</div>
+                  <div className="text-muted-foreground text-[10px]">{m.desc}</div>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right: Output Sizes & Actions */}
+        <div className="lg:col-span-1 space-y-4">
+          {/* Output Sizes */}
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm">输出尺寸</CardTitle>
+              <CardDescription className="text-xs">已选 {selectedSizes.size} 个尺寸</CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              {Object.entries(sizeGroups()).map(([group, sizes]) => (
+                <div key={group}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-xs font-medium">{group}</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 text-[10px] px-1.5"
+                      onClick={() => selectAllGroup(group)}
+                    >
+                      {sizes.every(s => selectedSizes.has(s.label)) ? '取消全选' : '全选'}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {sizes.map(s => (
+                      <Badge
+                        key={s.label}
+                        variant={selectedSizes.has(s.label) ? 'default' : 'outline'}
+                        className="cursor-pointer text-[10px] px-1.5 py-0 select-none"
+                        onClick={() => toggleSize(s.label)}
+                      >
+                        {s.label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <Separator />
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">自定义尺寸</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    className="h-7 text-xs w-20"
+                    placeholder="宽"
+                    value={customWidth}
+                    onChange={e => setCustomWidth(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <span className="text-xs text-muted-foreground">x</span>
+                  <Input
+                    className="h-7 text-xs w-20"
+                    placeholder="高"
+                    value={customHeight}
+                    onChange={e => setCustomHeight(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={addCustomSize}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+                {customSizes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {customSizes.map(s => (
+                      <Badge
+                        key={s.label}
+                        variant={selectedSizes.has(s.label) ? 'default' : 'outline'}
+                        className="cursor-pointer text-[10px] px-1.5 py-0 select-none"
+                        onClick={() => toggleSize(s.label)}
+                      >
+                        {s.label}
+                        <X
+                          className="h-2.5 w-2.5 ml-1 cursor-pointer"
+                          onClick={e => {
+                            e.stopPropagation()
+                            removeCustomSize(s.label)
+                          }}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Generate Button */}
+          <Card className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">选中图片</span>
+                <span className="font-medium">{selectedFiles.length} 张</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">选中尺寸</span>
+                <span className="font-medium">{selectedSizeOptions.length} 个</span>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium">总输出数量</span>
+                <span className="font-bold text-primary">{totalOutput}</span>
+              </div>
+              {generating && progressTotal > 0 && (
+                <div className="space-y-1">
+                  <Progress value={(progress / progressTotal) * 100} className="h-1.5" />
+                  <div className="text-[10px] text-muted-foreground text-center">
+                    处理中 {progress}/{progressTotal}
+                  </div>
+                </div>
+              )}
+              <Button
+                className="w-full"
+                size="sm"
+                onClick={handleGenerate}
+                disabled={generating || selectedFiles.length === 0 || selectedSizeOptions.length === 0}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    生成中...
+                  </>
+                ) : totalOutput <= 1 ? (
+                  <>
+                    <Download className="h-4 w-4 mr-1" />
+                    直接下载
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="h-4 w-4 mr-1" />
+                    打包下载 ZIP ({totalOutput} 个文件)
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Preview Section */}
+      {previewFileId && trimResult && (() => {
+        const f = files.find(x => x.id === previewFileId)
+        if (!f) return null
+        const { originalBounds, trimmedBounds } = trimResult
+        const originalPixels = f.width * f.height
+        const trimmedPixels = trimmedBounds.w * trimmedBounds.h
+        const savedPercent = originalPixels > 0 ? Math.round((1 - trimmedPixels / originalPixels) * 100) : 0
+
+        return (
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                裁剪预览 · {f.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium">原始尺寸</div>
+                  <div className="border rounded-md p-2 bg-muted/30">
+                    <canvas
+                      ref={canvasEl => {
+                        if (!canvasEl) return
+                        canvasEl.width = f.width
+                        canvasEl.height = f.height
+                        const ctx = canvasEl.getContext('2d')!
+                        ctx.drawImage(f.img, 0, 0)
+                        ctx.strokeStyle = '#ef4444'
+                        ctx.lineWidth = Math.max(2, Math.round(Math.min(f.width, f.height) / 200))
+                        ctx.setLineDash([8, 4])
+                        ctx.strokeRect(trimmedBounds.x, trimmedBounds.y, trimmedBounds.w, trimmedBounds.h)
+                      }}
+                      className="max-w-full max-h-48 object-contain mx-auto"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {f.width} x {f.height}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium">裁剪结果</div>
+                  <div className="border rounded-md p-2 bg-muted/30">
+                    <canvas
+                      ref={canvasEl => {
+                        if (!canvasEl) return
+                        const srcCanvas = document.createElement('canvas')
+                        srcCanvas.width = f.width
+                        srcCanvas.height = f.height
+                        const srcCtx = srcCanvas.getContext('2d')!
+                        srcCtx.drawImage(f.img, 0, 0)
+                        const imageData = srcCtx.getImageData(0, 0, f.width, f.height)
+                        const { trimmed } = autoTrimImage(imageData, tolerance, padding)
+                        canvasEl.width = trimmed.width
+                        canvasEl.height = trimmed.height
+                        const ctx = canvasEl.getContext('2d')!
+                        ctx.putImageData(trimmed, 0, 0)
+                      }}
+                      className="max-w-full max-h-48 object-contain mx-auto"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {trimmedBounds.w} x {trimmedBounds.h}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium">对比信息</div>
+                  <div className="space-y-2">
+                    <div className="p-2 rounded bg-muted/50 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">原始尺寸</span>
+                        <span className="font-mono">{f.width} x {f.height}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">内容区域</span>
+                        <span className="font-mono">{originalBounds.w} x {originalBounds.h}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">裁剪结果</span>
+                        <span className="font-mono">{trimmedBounds.w} x {trimmedBounds.h}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">像素节省</span>
+                        <span className={`font-bold ${savedPercent > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {savedPercent > 0 ? savedPercent : 0}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-2 rounded bg-muted/50 text-xs space-y-1">
+                      <div className="text-muted-foreground">裁剪偏移</div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">X</span>
+                        <span className="font-mono">{trimmedBounds.x}px</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Y</span>
+                        <span className="font-mono">{trimmedBounds.y}px</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
     </div>
   )
 }
