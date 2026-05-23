@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock, Loader2,
   Layers, Zap, Target, Play, Search, Filter, BarChart3, Check, Copy,
   RotateCcw, Star, Sparkles, TrendingUp, Ruler, ImagePlus, Eye,
-  ArrowRight, Package, XCircle, Info
+  ArrowRight, Package, XCircle, Info, FileText, Download, FolderOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -158,6 +158,7 @@ export default function SizeBasedWorkflowView({
   const [creating, setCreating] = useState(false)
   const [createdBatchId, setCreatedBatchId] = useState<string>('')
   const [actionLoading, setActionLoading] = useState<string>('')
+  const [copiedKey, setCopiedKey] = useState<string>('')
   const { toast } = useToast()
 
   // Load size workflow data
@@ -293,6 +294,33 @@ export default function SizeBasedWorkflowView({
     if (bytes < 1024) return `${bytes}B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+  }
+
+  // Generate file name for a size
+  const generateFileName = (sg: SizeGroupItem) => {
+    const gameNameClean = gameName || '游戏名'
+    const sizeStr = `${sg.width}x${sg.height}`
+    const ext = sg.format.toLowerCase()
+    return `${gameNameClean}_${sg.categories[0] || '素材'}_${sizeStr}.${ext}`
+  }
+
+  // Copy file names for a size group (for all channels)
+  const handleCopyFileNames = (sg: SizeGroupItem) => {
+    if (!data) return
+    const gameNameClean = gameName || '游戏名'
+    const lines = sg.channels.map(ch => {
+      const specForChannel = sg.specs.find(s => s.channel === ch)
+      const name = specForChannel?.name || sg.categories[0] || '素材'
+      const sizeStr = `${sg.width}x${sg.height}`
+      const ext = sg.format.toLowerCase()
+      return `${gameNameClean}_${ch}_${name}_${sizeStr}.${ext}`
+    })
+    const header = `📁 ${sg.width}x${sg.height} ${sg.format} (${sg.categories[0] || '素材'}) - ${sg.channels.length} 个渠道`
+    const divider = '─'.repeat(40)
+    navigator.clipboard.writeText(`${header}\n${divider}\n${lines.join('\n')}`)
+    setCopiedKey(sg.key)
+    toast({ title: '已复制文件名清单', description: `${sg.channels.length} 个渠道的文件名` })
+    setTimeout(() => setCopiedKey(''), 2000)
   }
 
   // Copy size list
@@ -895,7 +923,7 @@ export default function SizeBasedWorkflowView({
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1">
                                     {!isComplete && createdBatchId && (
                                       <>
                                         <Button
@@ -910,11 +938,11 @@ export default function SizeBasedWorkflowView({
                                           ) : (
                                             <Clock className="h-3 w-3 mr-0.5" />
                                           )}
-                                          开始
+                                          开始制作
                                         </Button>
                                         <Button
                                           size="sm"
-                                          className="text-[10px] h-7 px-2"
+                                          className="text-[10px] h-7 px-2 bg-emerald-600 hover:bg-emerald-700"
                                           onClick={() => handleSizeAction(sg.key, 'complete')}
                                           disabled={isLoading}
                                         >
@@ -923,7 +951,7 @@ export default function SizeBasedWorkflowView({
                                           ) : (
                                             <Check className="h-3 w-3 mr-0.5" />
                                           )}
-                                          完成此尺寸
+                                          我已做好，标记完成
                                         </Button>
                                       </>
                                     )}
@@ -945,12 +973,49 @@ export default function SizeBasedWorkflowView({
                                   </div>
                                 </div>
 
+                                {/* 3-Step Guide */}
+                                {!isComplete && (
+                                  <div className="mt-2 p-2 rounded-md bg-muted/30 border border-muted/50 space-y-2">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                                      <Info className="h-3 w-3" />
+                                      操作步骤：做一次 → 复制文件名 → 标记完成
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div className={`p-1.5 rounded text-center text-[10px] border ${progress?.inProgress ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800' : 'bg-muted/50 border-muted'}`}>
+                                        <div className="font-bold mb-0.5">1. 制作素材</div>
+                                        <div className="text-muted-foreground">{sg.width}x{sg.height} {sg.format}</div>
+                                        <div className="text-muted-foreground">做一张即可</div>
+                                      </div>
+                                      <div className={`p-1.5 rounded text-center text-[10px] border bg-muted/50 border-muted`}>
+                                        <div className="font-bold mb-0.5">2. 复制文件名</div>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="text-[9px] h-5 px-1.5 mt-0.5"
+                                          onClick={() => handleCopyFileNames(sg)}
+                                        >
+                                          {copiedKey === sg.key ? (
+                                            <><Check className="h-3 w-3 mr-0.5" />已复制</>
+                                          ) : (
+                                            <><Copy className="h-3 w-3 mr-0.5" />复制文件名</>
+                                          )}
+                                        </Button>
+                                      </div>
+                                      <div className={`p-1.5 rounded text-center text-[10px] border bg-muted/50 border-muted`}>
+                                        <div className="font-bold mb-0.5">3. 标记完成</div>
+                                        <div className="text-muted-foreground">点「标记完成」</div>
+                                        <div className="text-muted-foreground">{sg.channels.length}渠道全部完成</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Progress */}
                                 {progress && (
-                                  <div className="mb-2">
+                                  <div className="mt-2">
                                     <div className="flex items-center justify-between mb-1">
                                       <span className="text-[10px] text-muted-foreground">
-                                        {isComplete ? '已完成' : `${progress.completed}/${progress.total} 已完成`}
+                                        {isComplete ? '✅ 此尺寸已完成' : `${progress.completed}/${progress.total} 已完成`}
                                       </span>
                                       <span className="text-[10px] font-medium">
                                         {progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0}%
@@ -964,7 +1029,7 @@ export default function SizeBasedWorkflowView({
                                 )}
 
                                 {/* Channel Coverage */}
-                                <div className="flex items-center gap-1.5 text-[10px]">
+                                <div className="flex items-center gap-1.5 text-[10px] mt-2">
                                   <span className="text-muted-foreground">覆盖渠道:</span>
                                   <div className="flex flex-wrap gap-0.5">
                                     {sg.channels.slice(0, isExpanded ? sg.channels.length : 8).map(ch => (
@@ -980,24 +1045,46 @@ export default function SizeBasedWorkflowView({
                                   </div>
                                 </div>
 
-                                {/* Expanded: spec details */}
+                                {/* File name reference */}
+                                {!isComplete && (
+                                  <div className="mt-2 p-1.5 rounded bg-muted/40 text-[10px]">
+                                    <div className="flex items-center gap-1 mb-1 font-medium text-muted-foreground">
+                                      <FileText className="h-3 w-3" />
+                                      参考文件名
+                                    </div>
+                                    <code className="text-[9px] break-all text-foreground/80">
+                                      {generateFileName(sg)}
+                                    </code>
+                                    <div className="text-[9px] text-muted-foreground mt-0.5">
+                                      可点击「复制文件名」获取所有渠道的完整文件名列表
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Expanded: spec details with file names */}
                                 {isExpanded && (
                                   <div className="mt-2 pt-2 border-t border-muted/50">
                                     <div className="max-h-40 overflow-y-auto space-y-0.5">
-                                      {sg.specs.map(spec => (
-                                        <div key={spec.id} className="flex items-center gap-1.5 text-[10px]">
-                                          {spec.isRequired && <span className="text-red-500 font-bold">*</span>}
-                                          <span className="font-medium min-w-[60px]">{spec.channel}</span>
-                                          <span className="text-muted-foreground">—</span>
-                                          <span className="flex-1 truncate">{spec.name}</span>
-                                          {spec.priority === '高' && (
-                                            <Badge className="text-[8px] px-1 py-0 bg-red-100 text-red-700">高优</Badge>
-                                          )}
-                                          {spec.maxSize > 0 && (
-                                            <span className="text-muted-foreground shrink-0">≤{formatMaxSize(spec.maxSize)}</span>
-                                          )}
-                                        </div>
-                                      ))}
+                                      {sg.specs.map(spec => {
+                                        const gameNameClean = gameName || '游戏名'
+                                        const sizeStr = `${spec.width ?? sg.width}x${spec.height ?? sg.height}`
+                                        const ext = sg.format.toLowerCase()
+                                        const fileName = `${gameNameClean}_${spec.channel}_${spec.name}_${sizeStr}.${ext}`
+                                        return (
+                                          <div key={spec.id} className="flex items-center gap-1.5 text-[10px]">
+                                            {spec.isRequired && <span className="text-red-500 font-bold">*</span>}
+                                            <span className="font-medium min-w-[60px]">{spec.channel}</span>
+                                            <span className="text-muted-foreground">—</span>
+                                            <code className="flex-1 truncate text-foreground/70">{fileName}</code>
+                                            {spec.priority === '高' && (
+                                              <Badge className="text-[8px] px-1 py-0 bg-red-100 text-red-700 shrink-0">高优</Badge>
+                                            )}
+                                            {spec.maxSize > 0 && (
+                                              <span className="text-muted-foreground shrink-0">≤{formatMaxSize(spec.maxSize)}</span>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
                                     </div>
                                   </div>
                                 )}
