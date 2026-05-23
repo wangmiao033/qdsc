@@ -7,7 +7,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Info, Copy, Check, Download,
   Upload, Loader2, BarChart3, Clock, AlertOctagon, X, Layers, Zap, Target, ArrowRight, ArrowDown,
   FileSearch, RefreshCw, FileText, ImagePlus, FileImage, Eye, ScrollText,
-  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2
+  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2, Ruler
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,6 +34,7 @@ import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 import IconCropView from '@/components/icon-crop-view'
 import ProductionBoardView from '@/components/production-board-view'
+import SizeBasedWorkflowView from '@/components/size-based-workflow-view'
 
 // ========== Types ==========
 interface MaterialSpec {
@@ -667,6 +668,7 @@ export default function WorkflowApp() {
           {[
             { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
             { id: 'productionBoard', label: '生产看板', icon: Zap },
+            { id: 'sizeWorkflow', label: '按尺寸生产', icon: Ruler },
             { id: 'specs', label: '素材规格库', icon: Database },
             { id: 'categorize', label: '智能归类', icon: Layers },
             { id: 'digest', label: '需求消化', icon: FileSearch },
@@ -724,6 +726,12 @@ export default function WorkflowApp() {
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
             onNavigateToIconCrop={() => setActiveTab('iconCrop')}
+          />
+        )}
+        {activeTab === 'sizeWorkflow' && (
+          <SizeBasedWorkflowView
+            onBatchChange={setCurrentBatchId}
+            onRefresh={refreshAll}
           />
         )}
         {activeTab === 'specs' && (
