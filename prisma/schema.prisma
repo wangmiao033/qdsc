@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model MaterialSpec {
+  id          String   @id @default(cuid())
+  channel     String   // 渠道
+  name        String   // 素材名称
+  width       Int      // 宽
+  height      Int      // 高
+  format      String   // 格式 PNG/JPG 等
+  maxSize     Int      // 大小限制 KB
+  isRequired  Boolean  @default(true)  // 是否必做
+  copyLimit   String   @default("")    // 文案限制
+  forbidden   String   @default("")    // 禁止事项
+  remark      String   @default("")    // 备注
+  priority    String   @default("普通") // 优先级: 高/普通/低
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Batch {
+  id         String     @id @default(cuid())
+  gameName   String     // 游戏名称
+  batchName  String     // 批次名称
+  status     String     @default("进行中") // 进行中/已完成
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  tasks      TaskItem[]
+}
+
+model TaskItem {
+  id               String   @id @default(cuid())
+  batchId          String
+  batch            Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  specId           String
+  specChannel      String   // 冗余存储渠道
+  specName         String   // 冗余存储素材名称
+  specWidth        Int      // 冗余存储宽
+  specHeight       Int      // 冗余存储高
+  specFormat       String   // 冗余存储格式
+  specMaxSize      Int      // 冗余存储大小限制
+  specIsRequired   Boolean  // 冗余存储是否必做
+  suggestedFileName String   // 建议文件名
+  status           String   @default("待制作") // 待制作/已完成/异常
+  remark           String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model AcceptanceResult {
+  id           String   @id @default(cuid())
+  batchId      String
+  taskItemId   String
+  fileName     String
+  fileWidth    Int?
+  fileHeight   Int?
+  fileFormat   String?
+  fileSize     Int?     // KB
+  severity     String   @default("") // critical/normal/ignore
+  message      String   @default("")
+  createdAt    DateTime @default(now())
+}
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique // 设置键名
+  value String @default("") // JSON 格式值
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  batchId   String?
+  action    String   // 操作类型: task_status/task_remark/task_create/task_delete/batch_create/acceptance/import/export
+  target    String   @default("") // 操作对象名称
+  detail    String   @default("") // 详细描述
+  meta      String   @default("") // JSON 格式附加数据
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([createdAt])
+}
