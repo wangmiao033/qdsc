@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 import IconCropView from '@/components/icon-crop-view'
+import ProductionBoardView from '@/components/production-board-view'
 
 // ========== Types ==========
 interface MaterialSpec {
@@ -665,6 +666,7 @@ export default function WorkflowApp() {
         <nav className="flex-1 p-2 space-y-1">
           {[
             { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
+            { id: 'productionBoard', label: '生产看板', icon: Zap },
             { id: 'specs', label: '素材规格库', icon: Database },
             { id: 'categorize', label: '智能归类', icon: Layers },
             { id: 'digest', label: '需求消化', icon: FileSearch },
@@ -713,6 +715,12 @@ export default function WorkflowApp() {
           <DashboardView
             batchId={currentBatchId}
             batches={batches}
+            onBatchChange={setCurrentBatchId}
+            onRefresh={refreshAll}
+          />
+        )}
+        {activeTab === 'productionBoard' && (
+          <ProductionBoardView
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
           />
