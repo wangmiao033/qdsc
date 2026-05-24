@@ -2106,6 +2106,7 @@ function AcceptanceView({ batchId, onRefresh }: {
   const [uploaded, setUploaded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [previews, setPreviews] = useState<Record<number, string>>({})
+  const [resultView, setResultView] = useState<'size' | 'status'>('size')
   const { toast } = useToast()
 
   const addFiles = (fileList: FileList | File[]) => {
@@ -2129,6 +2130,7 @@ function AcceptanceView({ batchId, onRefresh }: {
     setUploaded(false)
     setResults([])
     setMissingRequired([])
+    setResultView('size')
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2185,6 +2187,7 @@ function AcceptanceView({ batchId, onRefresh }: {
     setResults(data.results)
     setMissingRequired(data.missingRequired || [])
     setUploaded(true)
+    setResultView('size')
     setLoading(false)
     onRefresh()
 
@@ -2204,11 +2207,57 @@ function AcceptanceView({ batchId, onRefresh }: {
     setMissingRequired([])
     setUploaded(false)
     setPreviews({})
+    setResultView('size')
   }
 
   const criticalResults = results.filter(r => r.severity === 'critical')
   const normalResults = results.filter(r => r.severity === 'normal')
   const ignoreResults = results.filter(r => r.severity === 'ignore')
+  const sizeGroups = Object.values(results.reduce((acc, result) => {
+    const sizeLabel = result.fileWidth && result.fileHeight
+      ? `${result.fileWidth}x${result.fileHeight}`
+      : '未知尺寸'
+    const format = result.fileFormat || '未知格式'
+    const key = sizeLabel
+    if (!acc[key]) {
+      acc[key] = {
+        key,
+        sizeLabel,
+        formats: new Set<string>(),
+        results: [] as AcceptanceResult[],
+        criticalCount: 0,
+        normalCount: 0,
+        passCount: 0,
+        channels: new Set<string>(),
+      }
+    }
+    const group = acc[key]
+    group.results.push(result)
+    group.formats.add(format)
+    if (result.severity === 'critical') group.criticalCount++
+    else if (result.severity === 'normal') group.normalCount++
+    else group.passCount++
+    if (result.specChannel && result.specChannel !== '-') {
+      group.channels.add(result.specChannel)
+    }
+    return acc
+  }, {} as Record<string, {
+    key: string
+    sizeLabel: string
+    formats: Set<string>
+    results: AcceptanceResult[]
+    criticalCount: number
+    normalCount: number
+    passCount: number
+    channels: Set<string>
+  }>)).sort((a, b) => {
+    const aProblem = a.criticalCount + a.normalCount
+    const bProblem = b.criticalCount + b.normalCount
+    if (bProblem !== aProblem) return bProblem - aProblem
+    return b.results.length - a.results.length
+  })
+  const issueSizeCount = sizeGroups.filter(g => g.criticalCount > 0 || g.normalCount > 0).length
+  const passSizeCount = sizeGroups.filter(g => g.criticalCount === 0 && g.normalCount === 0).length
 
   if (!batchId) {
     return (
@@ -2353,104 +2402,178 @@ function AcceptanceView({ batchId, onRefresh }: {
       {/* Results */}
       {uploaded && (
         <>
-          {/* Summary */}
-          <div className="grid grid-cols-4 gap-2">
-            <Card className="p-2.5 text-center">
-              <div className="text-lg font-bold">{results.length}</div>
-              <div className="text-[10px] text-muted-foreground">总计</div>
-            </Card>
-            <Card className="p-2.5 text-center border-red-200 bg-red-50">
-              <div className="text-lg font-bold text-red-600">{criticalResults.length}</div>
-              <div className="text-[10px] text-muted-foreground">严重</div>
-            </Card>
-            <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
-              <div className="text-lg font-bold text-amber-600">{normalResults.length}</div>
-              <div className="text-[10px] text-muted-foreground">普通</div>
-            </Card>
-            <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
-              <div className="text-lg font-bold text-emerald-600">{ignoreResults.length}</div>
-              <div className="text-[10px] text-muted-foreground">通过/可忽略</div>
-            </Card>
-          </div>
+          <Tabs value={resultView} onValueChange={(v) => setResultView(v as typeof resultView)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="size" className="text-xs">
+                <Ruler className="h-3.5 w-3.5 mr-1" />
+                按尺寸分组
+              </TabsTrigger>
+              <TabsTrigger value="status" className="text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                按问题类型
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Critical Results */}
-          {criticalResults.length > 0 && (
-            <Card className="border-red-200">
-              <CardHeader className="py-2 px-4">
-                <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                  <AlertOctagon className="h-4 w-4" />严重问题 ({criticalResults.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="max-h-48 overflow-y-auto">
-                  {criticalResults.map((r, i) => (
-                    <AcceptanceItem key={i} result={r} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            <TabsContent value="size" className="space-y-3 mt-3">
+              <div className="grid grid-cols-3 gap-2">
+                <Card className="p-2.5 text-center">
+                  <div className="text-lg font-bold">{sizeGroups.length}</div>
+                  <div className="text-[10px] text-muted-foreground">独立尺寸数</div>
+                </Card>
+                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
+                  <div className="text-lg font-bold text-amber-600">{issueSizeCount}</div>
+                  <div className="text-[10px] text-muted-foreground">有问题尺寸</div>
+                </Card>
+                <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
+                  <div className="text-lg font-bold text-emerald-600">{passSizeCount}</div>
+                  <div className="text-[10px] text-muted-foreground">通过尺寸</div>
+                </Card>
+              </div>
 
-          {/* Normal Results */}
-          {normalResults.length > 0 && (
-            <Card className="border-amber-200">
-              <CardHeader className="py-2 px-4">
-                <CardTitle className="text-sm text-amber-600 flex items-center gap-1">
-                  <AlertTriangle className="h-4 w-4" />普通警告 ({normalResults.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="max-h-48 overflow-y-auto">
-                  {normalResults.map((r, i) => (
-                    <AcceptanceItem key={i} result={r} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              <div className="space-y-2">
+                {sizeGroups.map(group => {
+                  const channels = Array.from(group.channels)
+                  const formats = Array.from(group.formats).sort()
+                  return (
+                    <Card key={group.key}>
+                      <CardHeader className="py-3 px-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
+                              <Ruler className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-mono">{group.sizeLabel}</span>
+                              {formats.map(format => (
+                                <Badge key={format} variant="outline" className="text-[10px] px-1.5">{format}</Badge>
+                              ))}
+                            </CardTitle>
+                            <CardDescription className="text-xs mt-1">
+                              {group.results.length} 个文件 · 涉及渠道 {channels.length}
+                              {channels.length > 0 && `：${channels.slice(0, 6).join('、')}`}
+                              {channels.length > 6 && ` 等 ${channels.length} 个`}
+                            </CardDescription>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Badge variant="outline" className="text-[10px] px-1.5 border-red-200 bg-red-50 text-red-700">
+                              严重 {group.criticalCount}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 border-amber-200 bg-amber-50 text-amber-700">
+                              警告 {group.normalCount}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700">
+                              通过 {group.passCount}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3">
+                        <div className="max-h-56 overflow-y-auto">
+                          {group.results.map((r, i) => (
+                            <AcceptanceItem key={`${group.key}-${i}`} result={r} />
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </TabsContent>
 
-          {/* Missing Required */}
-          {missingRequired.length > 0 && (
-            <Card className="border-red-200">
-              <CardHeader className="py-2 px-4">
-                <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                  <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="max-h-48 overflow-y-auto space-y-1">
-                  {missingRequired.map((m, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
-                      <div>
-                        <span className="font-medium">{m.specChannel}</span>
-                        <span className="text-muted-foreground mx-1">-</span>
-                        <span>{m.specName}</span>
-                      </div>
-                      <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
+            <TabsContent value="status" className="space-y-3 mt-3">
+              <div className="grid grid-cols-4 gap-2">
+                <Card className="p-2.5 text-center">
+                  <div className="text-lg font-bold">{results.length}</div>
+                  <div className="text-[10px] text-muted-foreground">总计</div>
+                </Card>
+                <Card className="p-2.5 text-center border-red-200 bg-red-50">
+                  <div className="text-lg font-bold text-red-600">{criticalResults.length}</div>
+                  <div className="text-[10px] text-muted-foreground">严重</div>
+                </Card>
+                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
+                  <div className="text-lg font-bold text-amber-600">{normalResults.length}</div>
+                  <div className="text-[10px] text-muted-foreground">普通</div>
+                </Card>
+                <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
+                  <div className="text-lg font-bold text-emerald-600">{ignoreResults.length}</div>
+                  <div className="text-[10px] text-muted-foreground">通过/可忽略</div>
+                </Card>
+              </div>
+
+              {criticalResults.length > 0 && (
+                <Card className="border-red-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-red-600 flex items-center gap-1">
+                      <AlertOctagon className="h-4 w-4" />严重问题 ({criticalResults.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto">
+                      {criticalResults.map((r, i) => (
+                        <AcceptanceItem key={i} result={r} />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                  </CardContent>
+                </Card>
+              )}
 
-          {/* Passed / Ignored */}
-          {ignoreResults.length > 0 && (
-            <Card className="border-emerald-200">
-              <CardHeader className="py-2 px-4">
-                <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4" />通过 / 可忽略 ({ignoreResults.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="max-h-48 overflow-y-auto">
-                  {ignoreResults.map((r, i) => (
-                    <AcceptanceItem key={i} result={r} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              {normalResults.length > 0 && (
+                <Card className="border-amber-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4" />普通警告 ({normalResults.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto">
+                      {normalResults.map((r, i) => (
+                        <AcceptanceItem key={i} result={r} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {missingRequired.length > 0 && (
+                <Card className="border-red-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-red-600 flex items-center gap-1">
+                      <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {missingRequired.map((m, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
+                          <div>
+                            <span className="font-medium">{m.specChannel}</span>
+                            <span className="text-muted-foreground mx-1">-</span>
+                            <span>{m.specName}</span>
+                          </div>
+                          <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {ignoreResults.length > 0 && (
+                <Card className="border-emerald-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />通过 / 可忽略 ({ignoreResults.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto">
+                      {ignoreResults.map((r, i) => (
+                        <AcceptanceItem key={i} result={r} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
 
           {/* Quick Re-acceptance for Failed Files */}
           {(criticalResults.length > 0 || normalResults.length > 0) && (
