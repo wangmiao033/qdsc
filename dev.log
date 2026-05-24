@@ -1,75 +1,17 @@
 ▲ Next.js 16.2.6 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://21.0.11.170:3000
+- Network:       http://21.0.22.150:3000
 - Environments: .env
-✓ Ready in 401ms
-Attention: Next.js now collects completely anonymous telemetry regarding usage.
-This information is used to shape Next.js' roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
-https://nextjs.org/telemetry
+✓ Ready in 278ms
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /home/z/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /home/z/my-project/package-lock.json
 
 
-○ Compiling / ...
- GET / 200 in 4.8s (next.js: 4.5s, application-code: 322ms)
- GET / 200 in 29ms (next.js: 2ms, application-code: 27ms)
- GET / 200 in 52ms (next.js: 4ms, application-code: 48ms)
- GET / 200 in 58ms (next.js: 3ms, application-code: 55ms)
- GET / 200 in 41ms (next.js: 3ms, application-code: 39ms)
 [DB] Found database at: /home/z/my-project/db/custom.db (656.0KB)
 [DB] Local mode, using: file:/home/z/my-project/db/custom.db
-prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`MaterialSpec`.`id` FROM `main`.`MaterialSpec` WHERE 1=1 LIMIT ? OFFSET ?) AS `sub`
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE 1=1 ORDER BY `main`.`Batch`.`createdAt` DESC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel`, `main`.`MaterialSpec`.`name`, `main`.`MaterialSpec`.`width`, `main`.`MaterialSpec`.`height`, `main`.`MaterialSpec`.`format`, `main`.`MaterialSpec`.`maxSize`, `main`.`MaterialSpec`.`isRequired`, `main`.`MaterialSpec`.`copyLimit`, `main`.`MaterialSpec`.`forbidden`, `main`.`MaterialSpec`.`remark`, `main`.`MaterialSpec`.`priority`, `main`.`MaterialSpec`.`createdAt`, `main`.`MaterialSpec`.`updatedAt` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`createdAt` DESC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`channel` ASC LIMIT ? OFFSET ?
- GET /api/batches 200 in 489ms (next.js: 412ms, application-code: 77ms)
- GET /api/specs?pageSize=200 200 in 450ms (next.js: 324ms, application-code: 126ms)
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE (`main`.`Batch`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`AcceptanceResult`.`id`, `main`.`AcceptanceResult`.`batchId`, `main`.`AcceptanceResult`.`taskItemId`, `main`.`AcceptanceResult`.`fileName`, `main`.`AcceptanceResult`.`fileWidth`, `main`.`AcceptanceResult`.`fileHeight`, `main`.`AcceptanceResult`.`fileFormat`, `main`.`AcceptanceResult`.`fileSize`, `main`.`AcceptanceResult`.`severity`, `main`.`AcceptanceResult`.`message`, `main`.`AcceptanceResult`.`createdAt` FROM `main`.`AcceptanceResult` WHERE `main`.`AcceptanceResult`.`batchId` = ? ORDER BY `main`.`AcceptanceResult`.`createdAt` DESC LIMIT ? OFFSET ?
- GET /api/dashboard?batchId=batch-bt-channels-001 200 in 135ms (next.js: 114ms, application-code: 21ms)
-✓ Compiled in 320ms
-⚠ Blocked cross-origin request to Next.js dev resource /__nextjs_font/geist-latin.woff2 from "preview-chat-e58edb7e-6e73-441d-9c2d-6e48d4d4c689.space-z.ai".
-Cross-origin access to Next.js dev resources is blocked by default for safety.
-
-To allow this host in development, add it to "allowedDevOrigins" in next.config.js and restart the dev server:
-
-// next.config.js
-module.exports = {
-  allowedDevOrigins: ['preview-chat-e58edb7e-6e73-441d-9c2d-6e48d4d4c689.space-z.ai'],
-}
-
-Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
-prisma:query SELECT 1
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE (`main`.`Batch`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`AcceptanceResult`.`id`, `main`.`AcceptanceResult`.`batchId`, `main`.`AcceptanceResult`.`taskItemId`, `main`.`AcceptanceResult`.`fileName`, `main`.`AcceptanceResult`.`fileWidth`, `main`.`AcceptanceResult`.`fileHeight`, `main`.`AcceptanceResult`.`fileFormat`, `main`.`AcceptanceResult`.`fileSize`, `main`.`AcceptanceResult`.`severity`, `main`.`AcceptanceResult`.`message`, `main`.`AcceptanceResult`.`createdAt` FROM `main`.`AcceptanceResult` WHERE `main`.`AcceptanceResult`.`batchId` = ? ORDER BY `main`.`AcceptanceResult`.`createdAt` DESC LIMIT ? OFFSET ?
- GET /api/dashboard?batchId=batch-bt-channels-001 200 in 26ms (next.js: 4ms, application-code: 22ms)
-prisma:query SELECT 1
-prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`MaterialSpec`.`id` FROM `main`.`MaterialSpec` WHERE 1=1 LIMIT ? OFFSET ?) AS `sub`
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel`, `main`.`MaterialSpec`.`name`, `main`.`MaterialSpec`.`width`, `main`.`MaterialSpec`.`height`, `main`.`MaterialSpec`.`format`, `main`.`MaterialSpec`.`maxSize`, `main`.`MaterialSpec`.`isRequired`, `main`.`MaterialSpec`.`copyLimit`, `main`.`MaterialSpec`.`forbidden`, `main`.`MaterialSpec`.`remark`, `main`.`MaterialSpec`.`priority`, `main`.`MaterialSpec`.`createdAt`, `main`.`MaterialSpec`.`updatedAt` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`createdAt` DESC LIMIT ? OFFSET ?
- GET /api/specs?pageSize=200 200 in 36ms (next.js: 5ms, application-code: 31ms)
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`channel` ASC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE 1=1 ORDER BY `main`.`Batch`.`createdAt` DESC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
- GET /api/batches 200 in 37ms (next.js: 3ms, application-code: 34ms)
-✓ Compiled in 365ms
- GET / 200 in 95ms (next.js: 58ms, application-code: 38ms)
-[DB] Found database at: /home/z/my-project/db/custom.db (656.0KB)
-[DB] Local mode, using: file:/home/z/my-project/db/custom.db
-prisma:query SELECT 1
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE (`main`.`Batch`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
- GET /api/dashboard?batchId=batch-bt-channels-001 200 in 68ms (next.js: 32ms, application-code: 36ms)
-prisma:query SELECT `main`.`AcceptanceResult`.`id`, `main`.`AcceptanceResult`.`batchId`, `main`.`AcceptanceResult`.`taskItemId`, `main`.`AcceptanceResult`.`fileName`, `main`.`AcceptanceResult`.`fileWidth`, `main`.`AcceptanceResult`.`fileHeight`, `main`.`AcceptanceResult`.`fileFormat`, `main`.`AcceptanceResult`.`fileSize`, `main`.`AcceptanceResult`.`severity`, `main`.`AcceptanceResult`.`message`, `main`.`AcceptanceResult`.`createdAt` FROM `main`.`AcceptanceResult` WHERE `main`.`AcceptanceResult`.`batchId` = ? ORDER BY `main`.`AcceptanceResult`.`createdAt` DESC LIMIT ? OFFSET ?
- GET /api/batches 200 in 55ms (next.js: 36ms, application-code: 19ms)
-prisma:query SELECT `main`.`Batch`.`id`, `main`.`Batch`.`gameName`, `main`.`Batch`.`batchName`, `main`.`Batch`.`status`, `main`.`Batch`.`createdAt`, `main`.`Batch`.`updatedAt` FROM `main`.`Batch` WHERE 1=1 ORDER BY `main`.`Batch`.`createdAt` DESC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`TaskItem`.`id`, `main`.`TaskItem`.`batchId`, `main`.`TaskItem`.`specId`, `main`.`TaskItem`.`specChannel`, `main`.`TaskItem`.`specName`, `main`.`TaskItem`.`specWidth`, `main`.`TaskItem`.`specHeight`, `main`.`TaskItem`.`specFormat`, `main`.`TaskItem`.`specMaxSize`, `main`.`TaskItem`.`specIsRequired`, `main`.`TaskItem`.`suggestedFileName`, `main`.`TaskItem`.`status`, `main`.`TaskItem`.`remark`, `main`.`TaskItem`.`createdAt`, `main`.`TaskItem`.`updatedAt` FROM `main`.`TaskItem` WHERE `main`.`TaskItem`.`batchId` IN (?) LIMIT ? OFFSET ?
-prisma:query SELECT 1
-prisma:query SELECT COUNT(*) AS `_count$_all` FROM (SELECT `main`.`MaterialSpec`.`id` FROM `main`.`MaterialSpec` WHERE 1=1 LIMIT ? OFFSET ?) AS `sub`
- GET / 200 in 93ms (next.js: 8ms, application-code: 85ms)
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel`, `main`.`MaterialSpec`.`name`, `main`.`MaterialSpec`.`width`, `main`.`MaterialSpec`.`height`, `main`.`MaterialSpec`.`format`, `main`.`MaterialSpec`.`maxSize`, `main`.`MaterialSpec`.`isRequired`, `main`.`MaterialSpec`.`copyLimit`, `main`.`MaterialSpec`.`forbidden`, `main`.`MaterialSpec`.`remark`, `main`.`MaterialSpec`.`priority`, `main`.`MaterialSpec`.`createdAt`, `main`.`MaterialSpec`.`updatedAt` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`createdAt` DESC LIMIT ? OFFSET ?
-prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel` FROM `main`.`MaterialSpec` WHERE 1=1 ORDER BY `main`.`MaterialSpec`.`channel` ASC LIMIT ? OFFSET ?
- GET /api/specs?pageSize=200 200 in 57ms (next.js: 32ms, application-code: 25ms)
- GET / 200 in 18ms (next.js: 2ms, application-code: 16ms)
-[?25h
+prisma:query SELECT `main`.`MaterialSpec`.`id`, `main`.`MaterialSpec`.`channel`, `main`.`MaterialSpec`.`name`, `main`.`MaterialSpec`.`width`, `main`.`MaterialSpec`.`height`, `main`.`MaterialSpec`.`format`, `main`.`MaterialSpec`.`isRequired`, `main`.`MaterialSpec`.`priority`, `main`.`MaterialSpec`.`maxSize` FROM `main`.`MaterialSpec` WHERE 1=1 LIMIT ? OFFSET ?
+ GET /api/production-board 200 in 1026ms (next.js: 942ms, application-code: 84ms)

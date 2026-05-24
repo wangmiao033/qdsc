@@ -2106,8 +2106,6 @@ function AcceptanceView({ batchId, onRefresh }: {
   const [uploaded, setUploaded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [previews, setPreviews] = useState<Record<number, string>>({})
-  const [resultView, setResultView] = useState<'severity' | 'size'>('size')
-  const [expandedSizeGroups, setExpandedSizeGroups] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   const addFiles = (fileList: FileList | File[]) => {
@@ -2375,316 +2373,83 @@ function AcceptanceView({ batchId, onRefresh }: {
             </Card>
           </div>
 
-          {/* View Toggle */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setResultView('size')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                resultView === 'size' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <Ruler className="h-3.5 w-3.5" />
-              按尺寸分组
-            </button>
-            <button
-              onClick={() => setResultView('severity')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                resultView === 'severity' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              按严重程度
-            </button>
-          </div>
-
-          {/* ========== 按尺寸分组视图 ========== */}
-          {resultView === 'size' && (() => {
-            // Group results by their expected size (from spec), or actual size if no spec match
-            const sizeGroups = new Map<string, {
-              key: string
-              width: number | null
-              height: number | null
-              format: string | null
-              results: AcceptanceResult[]
-              channels: Set<string>
-              hasCritical: boolean
-              hasNormal: boolean
-              allPassed: boolean
-            }>()
-
-            for (const r of results) {
-              // Use actual file dimensions as grouping key (since this is what was uploaded)
-              const w = r.fileWidth
-              const h = r.fileHeight
-              const fmt = r.fileFormat || '?'
-              const sizeKey = w && h ? `${w}x${h}_${fmt}` : `unknown_${r.fileName}`
-
-              if (!sizeGroups.has(sizeKey)) {
-                sizeGroups.set(sizeKey, {
-                  key: sizeKey,
-                  width: w,
-                  height: h,
-                  format: fmt,
-                  results: [],
-                  channels: new Set(),
-                  hasCritical: false,
-                  hasNormal: false,
-                  allPassed: true,
-                })
-              }
-              const group = sizeGroups.get(sizeKey)!
-              group.results.push(r)
-              if (r.specChannel && r.specChannel !== '-') group.channels.add(r.specChannel)
-              if (r.severity === 'critical') { group.hasCritical = true; group.allPassed = false }
-              if (r.severity === 'normal') { group.hasNormal = true; group.allPassed = false }
-            }
-
-            // Sort: critical first, then normal, then passed
-            const sortedGroups = [...sizeGroups.values()].sort((a, b) => {
-              if (a.hasCritical && !b.hasCritical) return -1
-              if (!a.hasCritical && b.hasCritical) return 1
-              if (a.hasNormal && !b.hasNormal) return -1
-              if (!a.hasNormal && b.hasNormal) return 1
-              if (a.allPassed && !b.allPassed) return 1
-              if (!a.allPassed && b.allPassed) return -1
-              return (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0)
-            })
-
-            const toggleExpand = (key: string) => {
-              setExpandedSizeGroups(prev => {
-                const next = new Set(prev)
-                if (next.has(key)) next.delete(key)
-                else next.add(key)
-                return next
-              })
-            }
-
-            // Size statistics
-            const totalGroups = sortedGroups.length
-            const problemGroups = sortedGroups.filter(g => g.hasCritical || g.hasNormal).length
-            const passedGroups = sortedGroups.filter(g => g.allPassed).length
-
-            return (
-              <div className="space-y-3">
-                {/* Size summary */}
-                <div className="grid grid-cols-3 gap-2">
-                  <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">{totalGroups}</div>
-                    <div className="text-[10px] text-muted-foreground">独立尺寸</div>
-                  </Card>
-                  <Card className="p-2.5 text-center border-red-200 bg-red-50">
-                    <div className="text-lg font-bold text-red-600">{problemGroups}</div>
-                    <div className="text-[10px] text-muted-foreground">有问题尺寸</div>
-                  </Card>
-                  <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
-                    <div className="text-lg font-bold text-emerald-600">{passedGroups}</div>
-                    <div className="text-[10px] text-muted-foreground">通过尺寸</div>
-                  </Card>
+          {/* Critical Results */}
+          {criticalResults.length > 0 && (
+            <Card className="border-red-200">
+              <CardHeader className="py-2 px-4">
+                <CardTitle className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertOctagon className="h-4 w-4" />严重问题 ({criticalResults.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="max-h-48 overflow-y-auto">
+                  {criticalResults.map((r, i) => (
+                    <AcceptanceItem key={i} result={r} />
+                  ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
 
-                {/* Size group cards */}
-                <div className="space-y-1.5 max-h-[70vh] overflow-y-auto">
-                  {sortedGroups.map(group => {
-                    const isExpanded = expandedSizeGroups.has(group.key)
-                    const sizeLabel = group.width && group.height ? `${group.width}x${group.height}` : '未知尺寸'
-                    const criticalCount = group.results.filter(r => r.severity === 'critical').length
-                    const normalCount = group.results.filter(r => r.severity === 'normal').length
-                    const passCount = group.results.filter(r => r.severity === 'ignore').length
-                    const borderColor = group.hasCritical
-                      ? 'border-red-200 bg-red-50/30 dark:border-red-800/50 dark:bg-red-950/10'
-                      : group.hasNormal
-                      ? 'border-amber-200 bg-amber-50/30 dark:border-amber-800/50 dark:bg-amber-950/10'
-                      : 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-800/50 dark:bg-emerald-950/10'
-
-                    return (
-                      <div key={group.key} className={`rounded-lg border ${borderColor} transition-colors`}>
-                        {/* Size header */}
-                        <div
-                          className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-muted/30"
-                          onClick={() => toggleExpand(group.key)}
-                        >
-                          {group.hasCritical ? (
-                            <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                          ) : group.hasNormal ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                          )}
-                          <span className="font-mono font-bold text-sm shrink-0">{sizeLabel}</span>
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0">{group.format}</Badge>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {criticalCount > 0 && (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-red-100 text-red-700 hover:bg-red-100">
-                                {criticalCount} 严重
-                              </Badge>
-                            )}
-                            {normalCount > 0 && (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-amber-100 text-amber-700 hover:bg-amber-100">
-                                {normalCount} 警告
-                              </Badge>
-                            )}
-                            {passCount > 0 && (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                                {passCount} 通过
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="flex-1 text-xs text-muted-foreground truncate">
-                            {group.results.length} 个文件 · {group.channels.size > 0 ? [...group.channels].slice(0, 3).join(', ') + (group.channels.size > 3 ? ` 等${group.channels.size}个渠道` : '') : '未匹配渠道'}
-                          </span>
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-                        </div>
-
-                        {/* Expanded: file details */}
-                        {isExpanded && (
-                          <div className="px-3 pb-3 border-t border-muted/50">
-                            <div className="mt-2 space-y-1.5">
-                              {group.results.map((r, i) => (
-                                <div key={i} className={`flex items-start justify-between text-xs rounded-md p-2 ${
-                                  r.severity === 'critical' ? 'bg-red-50 dark:bg-red-950/20' :
-                                  r.severity === 'normal' ? 'bg-amber-50 dark:bg-amber-950/20' :
-                                  'bg-emerald-50 dark:bg-emerald-950/20'
-                                }`}>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-mono truncate font-medium">{r.fileName}</div>
-                                    <div className="text-muted-foreground mt-0.5">
-                                      {r.specChannel !== '-' && (
-                                        <>
-                                          <span className="font-medium">{r.specChannel}</span>
-                                          <span className="mx-1">-</span>
-                                        </>
-                                      )}
-                                      <span>{r.specName}</span>
-                                      {r.fileWidth && r.fileHeight && (
-                                        <span className="ml-1 font-mono">({r.fileWidth}x{r.fileHeight})</span>
-                                      )}
-                                      {r.fileSize && <span className="ml-1">{r.fileSize}KB</span>}
-                                    </div>
-                                  </div>
-                                  <div className="shrink-0 ml-2 text-right">
-                                    <SeverityBadge severity={r.severity} />
-                                    <div className="text-[10px] text-muted-foreground mt-0.5 max-w-48">{r.message}</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+          {/* Normal Results */}
+          {normalResults.length > 0 && (
+            <Card className="border-amber-200">
+              <CardHeader className="py-2 px-4">
+                <CardTitle className="text-sm text-amber-600 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />普通警告 ({normalResults.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="max-h-48 overflow-y-auto">
+                  {normalResults.map((r, i) => (
+                    <AcceptanceItem key={i} result={r} />
+                  ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
 
-                {/* Missing required by size */}
-                {missingRequired.length > 0 && (
-                  <Card className="border-red-200">
-                    <CardHeader className="py-2 px-4">
-                      <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                        <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      <div className="max-h-48 overflow-y-auto space-y-1">
-                        {missingRequired.map((m, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
-                            <div>
-                              <span className="font-medium">{m.specChannel}</span>
-                              <span className="text-muted-foreground mx-1">-</span>
-                              <span>{m.specName}</span>
-                            </div>
-                            <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
-                          </div>
-                        ))}
+          {/* Missing Required */}
+          {missingRequired.length > 0 && (
+            <Card className="border-red-200">
+              <CardHeader className="py-2 px-4">
+                <CardTitle className="text-sm text-red-600 flex items-center gap-1">
+                  <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {missingRequired.map((m, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
+                      <div>
+                        <span className="font-medium">{m.specChannel}</span>
+                        <span className="text-muted-foreground mx-1">-</span>
+                        <span>{m.specName}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* ========== 按严重程度视图 ========== */}
-          {resultView === 'severity' && (
-            <>
-              {/* Critical Results */}
-              {criticalResults.length > 0 && (
-                <Card className="border-red-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertOctagon className="h-4 w-4" />严重问题 ({criticalResults.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto">
-                      {criticalResults.map((r, i) => (
-                        <AcceptanceItem key={i} result={r} />
-                      ))}
+                      <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-              {/* Normal Results */}
-              {normalResults.length > 0 && (
-                <Card className="border-amber-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-amber-600 flex items-center gap-1">
-                      <AlertTriangle className="h-4 w-4" />普通警告 ({normalResults.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto">
-                      {normalResults.map((r, i) => (
-                        <AcceptanceItem key={i} result={r} />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Missing Required */}
-              {missingRequired.length > 0 && (
-                <Card className="border-red-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                      {missingRequired.map((m, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
-                          <div>
-                            <span className="font-medium">{m.specChannel}</span>
-                            <span className="text-muted-foreground mx-1">-</span>
-                            <span>{m.specName}</span>
-                          </div>
-                          <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Passed / Ignored */}
-              {ignoreResults.length > 0 && (
-                <Card className="border-emerald-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="h-4 w-4" />通过 / 可忽略 ({ignoreResults.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto">
-                      {ignoreResults.map((r, i) => (
-                        <AcceptanceItem key={i} result={r} />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
+          {/* Passed / Ignored */}
+          {ignoreResults.length > 0 && (
+            <Card className="border-emerald-200">
+              <CardHeader className="py-2 px-4">
+                <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" />通过 / 可忽略 ({ignoreResults.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3">
+                <div className="max-h-48 overflow-y-auto">
+                  {ignoreResults.map((r, i) => (
+                    <AcceptanceItem key={i} result={r} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Quick Re-acceptance for Failed Files */}
@@ -2708,8 +2473,6 @@ function AcceptanceView({ batchId, onRefresh }: {
                     setFiles([])
                     setPreviews({})
                     setUploaded(false)
-                    setResultView('size')
-                    setExpandedSizeGroups(new Set())
                     toast({ title: '请上传修正后的文件', description: '只会验收此次上传的文件' })
                     // Scroll to top of upload area
                     window.scrollTo({ top: 0, behavior: 'smooth' })
