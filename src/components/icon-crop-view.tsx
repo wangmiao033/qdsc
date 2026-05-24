@@ -43,6 +43,19 @@ interface SizeOption {
   group: string
 }
 
+interface OutputPlanEntry {
+  file: UploadedFile
+  size: SizeOption
+  path: string
+}
+
+interface OutputPlanDuplicate {
+  path: string
+  kept: { fileName: string; size: string; group: string }
+  skipped: { fileName: string; size: string; group: string }
+  reason: 'duplicated_zip_path'
+}
+
 type ScaleMode = 'contain' | 'cover' | 'stretch'
 type ZipStructure = 'byFile' | 'bySize'
 type Rotation = 0 | 90 | 180 | 270
@@ -291,6 +304,64 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getBaseName(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, '')
+}
+
+function getOutputPath(file: UploadedFile, size: SizeOption, ext: string, zipStructure: ZipStructure) {
+  const baseName = getBaseName(file.name)
+  if (zipStructure === 'byFile') {
+    return `${baseName}/${baseName}_${size.width}x${size.height}.${ext}`
+  }
+  return `${size.width}x${size.height}/${baseName}_${size.width}x${size.height}.${ext}`
+}
+
+function createOutputPlan(
+  files: UploadedFile[],
+  sizes: SizeOption[],
+  outputFormat: string,
+  zipStructure: ZipStructure
+) {
+  const ext = getFormatExt(outputFormat)
+  const seen = new Map<string, OutputPlanEntry>()
+  const entries: OutputPlanEntry[] = []
+  const duplicates: OutputPlanDuplicate[] = []
+
+  for (const file of files) {
+    for (const size of sizes) {
+      const path = getOutputPath(file, size, ext, zipStructure)
+      const existing = seen.get(path)
+      if (existing) {
+        duplicates.push({
+          path,
+          kept: {
+            fileName: existing.file.name,
+            size: existing.size.label,
+            group: existing.size.group,
+          },
+          skipped: {
+            fileName: file.name,
+            size: size.label,
+            group: size.group,
+          },
+          reason: 'duplicated_zip_path',
+        })
+        continue
+      }
+
+      const entry = { file, size, path }
+      seen.set(path, entry)
+      entries.push(entry)
+    }
+  }
+
+  return {
+    entries,
+    duplicates,
+    candidateCount: files.length * sizes.length,
+  }
 }
 
 // ========== Spec Import Button ==========
@@ -723,6 +794,7 @@ export default function IconCropView() {
   const handleGenerate = useCallback(async () => {
     const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
     const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
+    const outputPlan = createOutputPlan(selectedFiles, selectedSizeOptions, outputFormat, zipStructure)
     if (selectedFiles.length === 0) {
       toast({ title: '请至少选择一张图片', variant: 'destructive' })
       return
@@ -731,23 +803,35 @@ export default function IconCropView() {
       toast({ title: '请至少选择一个输出尺寸', variant: 'destructive' })
       return
     }
+    if (outputPlan.entries.length === 0) {
+      toast({ title: '没有可生成的输出文件', variant: 'destructive' })
+      return
+    }
 
     setGenerating(true)
-    const totalOps = selectedFiles.length * selectedSizeOptions.length
+    const totalOps = outputPlan.entries.length
     setProgressTotal(totalOps)
     setProgress(0)
 
     try {
-      if (totalOps === 1) {
-        const f = selectedFiles[0]
-        const s = selectedSizeOptions[0]
+      if (outputPlan.duplicates.length > 0) {
+        console.info('[IconCrop] skipped/duplicated output paths; zip overwrite prevented', {
+          candidateCount: outputPlan.candidateCount,
+          zipFileCount: outputPlan.entries.length,
+          skippedDuplicatedCount: outputPlan.duplicates.length,
+          duplicates: outputPlan.duplicates,
+        })
+      }
+
+      if (outputPlan.entries.length === 1) {
+        const { file: f, size: s } = outputPlan.entries[0]
         let processedCanvas = getProcessedCanvas(f)
         if (enableRoundedCorners) {
           processedCanvas = applyRoundedCorners(processedCanvas, cornerRadius * Math.min(s.width, s.height) / 100)
         }
         const blob = await resizeImage(processedCanvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
         const ext = getFormatExt(outputFormat)
-        const baseName = f.name.replace(/\.[^.]+$/, '')
+        const baseName = getBaseName(f.name)
         saveAs(blob, `${baseName}_${s.width}x${s.height}.${ext}`)
         toast({ title: '下载完成' })
       } else {
@@ -756,21 +840,15 @@ export default function IconCropView() {
 
         for (const f of selectedFiles) {
           let processedCanvas = getProcessedCanvas(f)
-          const baseName = f.name.replace(/\.[^.]+$/, '')
+          const fileEntries = outputPlan.entries.filter(entry => entry.file.id === f.id)
 
-          for (const s of selectedSizeOptions) {
+          for (const { size: s, path } of fileEntries) {
             let canvas = processedCanvas
             if (enableRoundedCorners) {
               canvas = applyRoundedCorners(canvas, cornerRadius * Math.min(s.width, s.height) / 100)
             }
             const blob = await resizeImage(canvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
-            const ext = getFormatExt(outputFormat)
-
-            if (zipStructure === 'byFile') {
-              zip.file(`${baseName}/${baseName}_${s.width}x${s.height}.${ext}`, blob)
-            } else {
-              zip.file(`${s.width}x${s.height}/${baseName}_${s.width}x${s.height}.${ext}`, blob)
-            }
+            zip.file(path, blob)
             done++
             setProgress(done)
           }
@@ -789,7 +867,8 @@ export default function IconCropView() {
 
   const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
   const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
-  const totalOutput = selectedFiles.length * selectedSizeOptions.length
+  const outputPlan = createOutputPlan(selectedFiles, selectedSizeOptions, outputFormat, zipStructure)
+  const totalOutput = outputPlan.entries.length
 
   // Preview file
   const previewFile = files.find(f => f.id === previewFileId)
@@ -809,6 +888,7 @@ export default function IconCropView() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
               {selectedFiles.length} 图 / {selectedSizeOptions.length} 尺寸 / {totalOutput} 输出
+              {outputPlan.duplicates.length > 0 && ` / 跳过 ${outputPlan.duplicates.length} 重复`}
             </Badge>
           </div>
         )}
@@ -1304,7 +1384,7 @@ export default function IconCropView() {
                   className="w-full"
                   size="sm"
                   onClick={handleGenerate}
-                  disabled={generating || selectedFiles.length === 0 || selectedSizeOptions.length === 0}
+                  disabled={generating || selectedFiles.length === 0 || totalOutput === 0}
                 >
                   {generating ? (
                     <>
