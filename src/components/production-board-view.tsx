@@ -191,16 +191,28 @@ export default function ProductionBoardView({
   const [searchQuery, setSearchQuery] = useState('')
   const [copied, setCopied] = useState(false)
   const [smartSort, setSmartSort] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Load board data
   const loadBoardData = useCallback(async () => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 12000)
     setLoading(true)
+    setLoadError(null)
     try {
       // Get all target channel main names
       const allTargetNames = TARGET_CHANNEL_GROUPS.flatMap(g => g.channels.map(c => c.main))
-      const res = await fetch(`/api/production-board?channels=${encodeURIComponent(allTargetNames.join(','))}`)
+      const res = await fetch(`/api/production-board?channels=${encodeURIComponent(allTargetNames.join(','))}`, {
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        throw new Error(`生产看板接口返回 ${res.status}`)
+      }
       const data = await res.json()
+      if (!data?.channels || !data?.summary || !data?.sizeGroups) {
+        throw new Error('生产看板数据格式异常')
+      }
       setBoardData(data)
 
       // Auto-select all channels that have specs
@@ -211,8 +223,15 @@ export default function ProductionBoardView({
       setSelectedDbChannels([...new Set(autoSelected)])
     } catch (err) {
       console.error('Failed to load board data:', err)
+      setLoadError(err instanceof Error && err.name === 'AbortError'
+        ? '生产看板加载超时，请检查网络后重试'
+        : err instanceof Error
+          ? err.message
+          : '生产看板加载失败')
+    } finally {
+      window.clearTimeout(timeoutId)
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => { loadBoardData() }, [loadBoardData])
@@ -507,7 +526,27 @@ export default function ProductionBoardView({
     )
   }
 
-  if (!boardData) return null
+  if (!boardData) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center space-y-4">
+            <AlertTriangle className="h-10 w-10 mx-auto text-amber-500" />
+            <div>
+              <h2 className="text-lg font-semibold">生产看板加载失败</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                {loadError || '暂时无法读取渠道规格数据'}
+              </p>
+            </div>
+            <Button size="sm" onClick={loadBoardData}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              重新加载
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col">
