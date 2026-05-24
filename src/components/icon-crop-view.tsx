@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Crop, PlusCircle, Minus, Move, Maximize2, Upload, X, Download, FileDown,
   RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2, Eye, Palette,
