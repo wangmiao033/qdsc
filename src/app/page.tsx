@@ -2177,30 +2177,87 @@ function AcceptanceView({ batchId, onRefresh }: {
     setIsDragging(false)
   }
 
+  const parseImageMeta = (file: File): Promise<{
+    fileName: string
+    fileWidth: number | null
+    fileHeight: number | null
+    fileFormat: string | null
+    fileSize: number
+  }> => {
+    const ext = file.name.split('.').pop()?.toUpperCase() || ''
+    const fileFormat = ext === 'JPEG' ? 'JPG' : ext
+    const fileSize = Math.round(file.size / 1024)
+
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file)
+      const img = new Image()
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        resolve({
+          fileName: file.name,
+          fileWidth: img.naturalWidth,
+          fileHeight: img.naturalHeight,
+          fileFormat,
+          fileSize,
+        })
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        resolve({
+          fileName: file.name,
+          fileWidth: null,
+          fileHeight: null,
+          fileFormat,
+          fileSize,
+        })
+      }
+      img.src = url
+    })
+  }
+
   const handleAccept = async () => {
     if (!batchId || files.length === 0) {
       toast({ title: '请先选择批次并上传文件', variant: 'destructive' })
       return
     }
     setLoading(true)
-    const fd = new FormData()
-    fd.append('batchId', batchId)
-    files.forEach(f => fd.append('files', f))
+    try {
+      const fileMetas = await Promise.all(files.map(parseImageMeta))
 
-    const res = await fetch('/api/acceptance', { method: 'POST', body: fd })
-    const data = await res.json()
-    setResults(data.results)
-    setMissingRequired(data.missingRequired || [])
-    setUploaded(true)
-    setResultView('size')
-    setLoading(false)
-    onRefresh()
+      const res = await fetch('/api/acceptance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId, files: fileMetas }),
+      })
 
-    const criticalCount = data.results.filter((r: AcceptanceResult) => r.severity === 'critical').length
-    if (criticalCount > 0) {
-      toast({ title: `验收完成: ${criticalCount} 个严重问题`, variant: 'destructive' })
-    } else {
-      toast({ title: `验收完成: ${data.results.length} 个文件通过检查` })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || `验收失败 (${res.status})`)
+      }
+      if (!data.results) {
+        throw new Error('服务器返回数据异常')
+      }
+
+      setResults(data.results)
+      setMissingRequired(data.missingRequired || [])
+      setUploaded(true)
+      setResultView('size')
+      onRefresh()
+
+      const criticalCount = data.results.filter((r: AcceptanceResult) => r.severity === 'critical').length
+      if (criticalCount > 0) {
+        toast({ title: `验收完成: ${criticalCount} 个严重问题`, variant: 'destructive' })
+      } else {
+        toast({ title: `验收完成: ${data.results.length} 个文件通过检查` })
+      }
+    } catch (err) {
+      toast({
+        title: '验收失败',
+        description: err instanceof Error ? err.message : '请稍后重试',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
