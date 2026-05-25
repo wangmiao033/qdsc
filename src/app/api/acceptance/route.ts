@@ -1,6 +1,13 @@
-import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { logActivity } from '@/lib/log'
+import {
+  buildBatchProgress,
+  dimKey,
+  getHistoricallyCoveredDims,
+  loadBatchAcceptanceContext,
+  type TaskItem,
+} from '@/lib/acceptance'
+import { db } from '@/lib/db'
 
 export const maxDuration = 60
 
@@ -25,12 +32,7 @@ interface AcceptanceResultItem {
   message: string
   matchedTaskCount: number
   matchedChannels: string[]
-}
-
-type TaskItem = Awaited<ReturnType<typeof db.taskItem.findMany>>[number]
-
-function dimKey(width: number, height: number) {
-  return `${width}x${height}`
+  isNew: boolean
 }
 
 function findMatchedTasks(file: FileMeta, tasks: TaskItem[]): TaskItem[] {
@@ -42,10 +44,8 @@ function findMatchedTasks(file: FileMeta, tasks: TaskItem[]): TaskItem[] {
   if (matched.length === 0) return []
 
   const fileName = file.fileName.replace(/\.[^.]+$/, '')
-
   const channelMatches = matched.filter(t => fileName.includes(t.specChannel))
   if (channelMatches.length > 0) matched = channelMatches
-
   const nameMatches = matched.filter(t => fileName.includes(t.specName))
   if (nameMatches.length > 0) matched = nameMatches
 
@@ -55,35 +55,34 @@ function findMatchedTasks(file: FileMeta, tasks: TaskItem[]): TaskItem[] {
 function validateFile(
   file: FileMeta,
   tasks: TaskItem[],
-): { result: AcceptanceResultItem; matchedTasks: TaskItem[]; issues: { severity: string; message: string }[] } {
+  previouslyCovered: Set<string>,
+  sessionNewDims: Set<string>,
+): { result: AcceptanceResultItem; matchedTasks: TaskItem[] } {
   const { fileWidth, fileHeight, fileFormat, fileSize: fileSizeKB } = file
   const matchedTasks = findMatchedTasks(file, tasks)
-  const issues: { severity: string; message: string }[] = []
-
-  if (!fileWidth || !fileHeight) {
-    issues.push({ severity: 'critical', message: '无法读取图片尺寸' })
-  } else if (matchedTasks.length === 0) {
-    issues.push({
-      severity: 'critical',
-      message: `尺寸 ${fileWidth}x${fileHeight} 不在本批次任务清单中`,
-    })
-  } else {
-    const channels = [...new Set(matchedTasks.map(t => t.specChannel))]
-    issues.push({
-      severity: 'ignore',
-      message: `尺寸匹配 ${fileWidth}x${fileHeight}，覆盖 ${matchedTasks.length} 项任务 / ${channels.length} 个渠道`,
-    })
-  }
-
-  let overallSeverity = ''
-  for (const issue of issues) {
-    if (issue.severity === 'critical') { overallSeverity = 'critical'; break }
-    if (issue.severity === 'normal') overallSeverity = 'normal'
-  }
-  if (!overallSeverity && issues.length > 0) overallSeverity = 'ignore'
-
   const channels = [...new Set(matchedTasks.map(t => t.specChannel))]
   const primary = matchedTasks[0]
+  const dim = fileWidth && fileHeight ? dimKey(fileWidth, fileHeight) : ''
+
+  let severity = 'critical'
+  let message = ''
+  let isNew = false
+
+  if (!fileWidth || !fileHeight) {
+    message = '无法读取图片尺寸'
+  } else if (matchedTasks.length === 0) {
+    message = `尺寸 ${fileWidth}x${fileHeight} 不在本批次任务清单中`
+  } else if (previouslyCovered.has(dim) || sessionNewDims.has(dim)) {
+    severity = 'duplicate'
+    message = previouslyCovered.has(dim)
+      ? `尺寸 ${fileWidth}x${fileHeight} 此前已提交，无需重复补充`
+      : `尺寸 ${fileWidth}x${fileHeight} 本次已提交，无需重复上传`
+    isNew = false
+  } else {
+    severity = 'ignore'
+    message = `尺寸匹配 ${fileWidth}x${fileHeight}，覆盖 ${matchedTasks.length} 项任务 / ${channels.length} 个渠道`
+    isNew = true
+  }
 
   return {
     result: {
@@ -99,13 +98,42 @@ function validateFile(
       fileHeight,
       fileFormat,
       fileSize: fileSizeKB,
-      severity: overallSeverity,
-      message: issues.map(i => i.message).join('; '),
+      severity,
+      message,
       matchedTaskCount: matchedTasks.length,
       matchedChannels: channels,
+      isNew,
     },
     matchedTasks,
-    issues,
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const batchId = req.nextUrl.searchParams.get('batchId')
+    if (!batchId) {
+      return NextResponse.json({ error: 'Missing batchId' }, { status: 400 })
+    }
+
+    const ctx = await loadBatchAcceptanceContext(batchId)
+    if (!ctx) {
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      batchProgress: ctx.batchProgress,
+      batch: {
+        id: ctx.batch.id,
+        gameName: ctx.batch.gameName,
+        batchName: ctx.batch.batchName,
+      },
+    })
+  } catch (err) {
+    console.error('[acceptance GET] error:', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : '获取验收进度失败' },
+      { status: 500 },
+    )
   }
 }
 
@@ -119,21 +147,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing batchId or files' }, { status: 400 })
     }
 
-    const batch = await db.batch.findUnique({ where: { id: batchId } })
-    if (!batch) {
+    const ctx = await loadBatchAcceptanceContext(batchId)
+    if (!ctx) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
     }
 
-    const tasks = await db.taskItem.findMany({ where: { batchId } })
+    const { batch, tasks, acceptanceResults } = ctx
+    const previouslyCovered = getHistoricallyCoveredDims(tasks, acceptanceResults)
+    const sessionNewDims = new Set<string>()
+    const newlyCoveredDims = new Set<string>()
     const results: AcceptanceResultItem[] = []
-    const satisfiedDims = new Set<string>()
 
     for (const file of files) {
-      const { result, matchedTasks } = validateFile(file, tasks)
+      const { result, matchedTasks } = validateFile(file, tasks, previouslyCovered, sessionNewDims)
       results.push(result)
 
-      if (result.severity === 'ignore' && file.fileWidth && file.fileHeight) {
-        satisfiedDims.add(dimKey(file.fileWidth, file.fileHeight))
+      if (result.isNew && file.fileWidth && file.fileHeight) {
+        const key = dimKey(file.fileWidth, file.fileHeight)
+        sessionNewDims.add(key)
+        newlyCoveredDims.add(key)
       }
 
       await db.acceptanceResult.create({
@@ -151,9 +183,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 一张同尺寸素材覆盖批次内所有同尺寸任务
     for (const task of tasks) {
-      if (satisfiedDims.has(dimKey(task.specWidth, task.specHeight))) {
+      if (newlyCoveredDims.has(dimKey(task.specWidth, task.specHeight))) {
         await db.taskItem.update({
           where: { id: task.id },
           data: { status: '已完成' },
@@ -161,66 +192,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const requiredDimKeys = new Set(
-      tasks.filter(t => t.specIsRequired).map(t => dimKey(t.specWidth, t.specHeight)),
-    )
-    const coveredDimKeys = new Set([...satisfiedDims].filter(k => requiredDimKeys.has(k)))
-    const missingDimKeys = [...requiredDimKeys].filter(k => !satisfiedDims.has(k))
-
-    const missingByDim = new Map<string, TaskItem[]>()
-    for (const t of tasks.filter(t => t.specIsRequired && missingDimKeys.includes(dimKey(t.specWidth, t.specHeight)))) {
-      const key = dimKey(t.specWidth, t.specHeight)
-      if (!missingByDim.has(key)) missingByDim.set(key, [])
-      missingByDim.get(key)!.push(t)
-    }
-
-    const missingRequired = [...missingByDim.entries()].map(([, items]) => {
-      const t = items[0]
-      const channels = [...new Set(items.map(i => i.specChannel))]
-      return {
-        id: t.id,
-        specChannel: channels.length === 1 ? channels[0] : `${channels.slice(0, 3).join('、')} 等${channels.length}个渠道`,
-        specName: t.specName,
-        suggestedFileName: `${t.specWidth}x${t.specHeight}.${t.specFormat.toLowerCase()}`,
-        size: dimKey(t.specWidth, t.specHeight),
-        channelCount: channels.length,
-        taskCount: items.length,
-      }
+    const cumulativeCovered = new Set([...previouslyCovered, ...newlyCoveredDims])
+    const updatedAcceptance = await db.acceptanceResult.findMany({
+      where: { batchId },
+      orderBy: { createdAt: 'desc' },
     })
+    const batchProgress = buildBatchProgress(tasks, cumulativeCovered, updatedAcceptance)
 
-    const criticalCount = results.filter(r => r.severity === 'critical').length
-    const passCount = results.filter(r => r.severity === 'ignore').length
-    const matchedCount = results.filter(r => r.matchedTaskCount > 0).length
+    const sessionSummary = {
+      passed: results.filter(r => r.isNew).length,
+      duplicate: results.filter(r => r.severity === 'duplicate').length,
+      failed: results.filter(r => r.severity === 'critical').length,
+      total: results.length,
+    }
 
     await logActivity({
       batchId,
       action: 'acceptance',
       target: `${batch.gameName} - ${batch.batchName}`,
-      detail: `素材验收: 上传 ${files.length} 个文件, 尺寸匹配 ${matchedCount}, 通过 ${passCount}, 尺寸不符 ${criticalCount}, 覆盖 ${coveredDimKeys.size}/${requiredDimKeys.size} 个必做尺寸`,
+      detail: `素材验收: 本次上传 ${files.length} 个, 新通过 ${sessionSummary.passed}, 重复 ${sessionSummary.duplicate}, 不符 ${sessionSummary.failed}, 累计 ${batchProgress.coveredSizes}/${batchProgress.requiredSizes} 个必做尺寸`,
       meta: {
         totalFiles: files.length,
-        matched: matchedCount,
-        pass: passCount,
-        critical: criticalCount,
-        coveredSizes: coveredDimKeys.size,
-        requiredSizes: requiredDimKeys.size,
-        missingSizes: missingDimKeys.length,
+        sessionPassed: sessionSummary.passed,
+        sessionDuplicate: sessionSummary.duplicate,
+        sessionFailed: sessionSummary.failed,
+        coveredSizes: batchProgress.coveredSizes,
+        requiredSizes: batchProgress.requiredSizes,
+        missingSizes: batchProgress.missingSizes,
       },
     })
 
     return NextResponse.json({
       results,
-      missingRequired,
+      sessionSummary,
+      batchProgress,
+      missingRequired: batchProgress.missingList,
       sizeSummary: {
-        requiredSizes: requiredDimKeys.size,
-        coveredSizes: coveredDimKeys.size,
-        uploadedSizes: satisfiedDims.size,
-        missingSizes: missingRequired.map(m => ({
-          size: m.size,
-          channelCount: m.channelCount,
-          taskCount: m.taskCount,
-          channels: m.specChannel,
-        })),
+        requiredSizes: batchProgress.requiredSizes,
+        coveredSizes: batchProgress.coveredSizes,
+        missingSizes: batchProgress.missingSizes,
+        uploadedSizes: sessionSummary.passed,
       },
       totalFiles: files.length,
       totalTasks: tasks.length,

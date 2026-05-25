@@ -93,13 +93,42 @@ interface AcceptanceResult {
   message: string
   matchedTaskCount?: number
   matchedChannels?: string[]
+  isNew?: boolean
+}
+
+interface AcceptanceSizeEntry {
+  size: string
+  width: number
+  height: number
+  specName: string
+  format: string
+  channelCount: number
+  taskCount: number
+  channels: string
+  fileName?: string
+  submittedAt?: string
+}
+
+interface AcceptanceBatchProgress {
+  requiredSizes: number
+  coveredSizes: number
+  missingSizes: number
+  coveredList: AcceptanceSizeEntry[]
+  missingList: AcceptanceSizeEntry[]
+}
+
+interface AcceptanceSessionSummary {
+  passed: number
+  duplicate: number
+  failed: number
+  total: number
 }
 
 interface AcceptanceSizeSummary {
   requiredSizes: number
   coveredSizes: number
   uploadedSizes: number
-  missingSizes: Array<{ size: string; channelCount: number; taskCount: number; channels: string }>
+  missingSizes: number
 }
 
 interface CategorizeData {
@@ -2115,14 +2144,36 @@ function AcceptanceView({ batchId, onRefresh }: {
 }) {
   const [files, setFiles] = useState<File[]>([])
   const [results, setResults] = useState<AcceptanceResult[]>([])
-  const [missingRequired, setMissingRequired] = useState<Array<{ id: string; specChannel: string; specName: string; suggestedFileName: string; size?: string; channelCount?: number; taskCount?: number }>>([])
+  const [batchProgress, setBatchProgress] = useState<AcceptanceBatchProgress | null>(null)
+  const [sessionSummary, setSessionSummary] = useState<AcceptanceSessionSummary | null>(null)
   const [sizeSummary, setSizeSummary] = useState<AcceptanceSizeSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [progressLoading, setProgressLoading] = useState(false)
   const [uploaded, setUploaded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [previews, setPreviews] = useState<Record<number, string>>({})
-  const [resultView, setResultView] = useState<'size' | 'status'>('size')
+  const [resultView, setResultView] = useState<'progress' | 'session'>('session')
   const { toast } = useToast()
+
+  const fetchBatchProgress = useCallback(async () => {
+    if (!batchId) return
+    setProgressLoading(true)
+    try {
+      const res = await fetch(`/api/acceptance?batchId=${batchId}`)
+      const data = await res.json()
+      if (res.ok && data.batchProgress) {
+        setBatchProgress(data.batchProgress)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setProgressLoading(false)
+    }
+  }, [batchId])
+
+  useEffect(() => {
+    fetchBatchProgress()
+  }, [fetchBatchProgress])
 
   const addFiles = (fileList: FileList | File[]) => {
     const newFiles = Array.from(fileList).filter(f =>
@@ -2144,8 +2195,8 @@ function AcceptanceView({ batchId, onRefresh }: {
     })
     setUploaded(false)
     setResults([])
-    setMissingRequired([])
-    setResultView('size')
+    setSessionSummary(null)
+    setResultView('session')
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2249,24 +2300,31 @@ function AcceptanceView({ batchId, onRefresh }: {
       }
 
       setResults(data.results)
-      setMissingRequired(data.missingRequired || [])
+      setSessionSummary(data.sessionSummary || null)
+      setBatchProgress(data.batchProgress || null)
       setSizeSummary(data.sizeSummary || null)
       setUploaded(true)
-      setResultView('size')
+      setResultView('session')
       onRefresh()
+      fetchBatchProgress()
 
-      const criticalCount = data.results.filter((r: AcceptanceResult) => r.severity === 'critical').length
-      const summary = data.sizeSummary as AcceptanceSizeSummary | undefined
-      if (criticalCount > 0) {
+      const summary = data.sessionSummary as AcceptanceSessionSummary | undefined
+      const progress = data.batchProgress as AcceptanceBatchProgress | undefined
+      if (summary?.failed) {
         toast({
-          title: `验收完成: ${criticalCount} 个尺寸不符`,
-          description: summary ? `已覆盖 ${summary.coveredSizes}/${summary.requiredSizes} 个必做尺寸` : undefined,
+          title: `本次: ${summary.passed} 个新通过, ${summary.failed} 个尺寸不符`,
+          description: progress ? `累计 ${progress.coveredSizes}/${progress.requiredSizes}，还需 ${progress.missingSizes} 个尺寸` : undefined,
           variant: 'destructive',
+        })
+      } else if (summary?.duplicate && !summary.passed) {
+        toast({
+          title: '本次均为已提交尺寸',
+          description: progress ? `累计 ${progress.coveredSizes}/${progress.requiredSizes}，无需重复补充` : undefined,
         })
       } else {
         toast({
-          title: `验收完成: ${data.results.length} 个文件全部尺寸匹配`,
-          description: summary ? `覆盖 ${summary.coveredSizes}/${summary.requiredSizes} 个必做尺寸` : undefined,
+          title: `本次 ${summary?.passed || 0} 个新通过${summary?.duplicate ? `, ${summary.duplicate} 个重复跳过` : ''}`,
+          description: progress ? `累计 ${progress.coveredSizes}/${progress.requiredSizes}，还需 ${progress.missingSizes} 个尺寸` : undefined,
         })
       }
     } catch (err) {
@@ -2281,67 +2339,41 @@ function AcceptanceView({ batchId, onRefresh }: {
   }
 
   const reset = () => {
-    // Cleanup all preview URLs
     Object.values(previews).forEach(url => URL.revokeObjectURL(url))
     setFiles([])
     setResults([])
-    setMissingRequired([])
+    setSessionSummary(null)
     setSizeSummary(null)
     setUploaded(false)
     setPreviews({})
-    setResultView('size')
+    setResultView('session')
+  }
+
+  const continueSupplement = () => {
+    Object.values(previews).forEach(url => URL.revokeObjectURL(url))
+    setFiles([])
+    setPreviews({})
+    setUploaded(false)
+    setResults([])
+    setSessionSummary(null)
+    setSizeSummary(null)
+    toast({ title: '请继续上传待补充的尺寸', description: '已提交的尺寸会自动识别，无需重复上传' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const copyMissingSizes = async () => {
+    const list = batchProgress?.missingList || []
+    if (list.length === 0) return
+    await navigator.clipboard.writeText(list.map(m => m.size).join('\n'))
+    toast({ title: `已复制 ${list.length} 个待提交尺寸` })
   }
 
   const criticalResults = results.filter(r => r.severity === 'critical')
-  const normalResults = results.filter(r => r.severity === 'normal')
-  const ignoreResults = results.filter(r => r.severity === 'ignore')
-  const sizeGroups = Object.values(results.reduce((acc, result) => {
-    const sizeLabel = result.fileWidth && result.fileHeight
-      ? `${result.fileWidth}x${result.fileHeight}`
-      : '未知尺寸'
-    const format = result.fileFormat || '未知格式'
-    const key = sizeLabel
-    if (!acc[key]) {
-      acc[key] = {
-        key,
-        sizeLabel,
-        formats: new Set<string>(),
-        results: [] as AcceptanceResult[],
-        criticalCount: 0,
-        normalCount: 0,
-        passCount: 0,
-        channels: new Set<string>(),
-      }
-    }
-    const group = acc[key]
-    group.results.push(result)
-    group.formats.add(format)
-    if (result.severity === 'critical') group.criticalCount++
-    else if (result.severity === 'normal') group.normalCount++
-    else group.passCount++
-    if (result.matchedChannels?.length) {
-      result.matchedChannels.forEach(ch => group.channels.add(ch))
-    } else if (result.specChannel && result.specChannel !== '-') {
-      group.channels.add(result.specChannel)
-    }
-    return acc
-  }, {} as Record<string, {
-    key: string
-    sizeLabel: string
-    formats: Set<string>
-    results: AcceptanceResult[]
-    criticalCount: number
-    normalCount: number
-    passCount: number
-    channels: Set<string>
-  }>)).sort((a, b) => {
-    const aProblem = a.criticalCount + a.normalCount
-    const bProblem = b.criticalCount + b.normalCount
-    if (bProblem !== aProblem) return bProblem - aProblem
-    return b.results.length - a.results.length
-  })
-  const issueSizeCount = sizeGroups.filter(g => g.criticalCount > 0 || g.normalCount > 0).length
-  const passSizeCount = sizeGroups.filter(g => g.criticalCount === 0 && g.normalCount === 0).length
+  const passedResults = results.filter(r => r.isNew)
+  const duplicateResults = results.filter(r => r.severity === 'duplicate')
+  const progressPercent = batchProgress && batchProgress.requiredSizes > 0
+    ? Math.round((batchProgress.coveredSizes / batchProgress.requiredSizes) * 100)
+    : 0
 
   if (!batchId) {
     return (
@@ -2359,8 +2391,39 @@ function AcceptanceView({ batchId, onRefresh }: {
     <div className="p-4 space-y-4 max-w-5xl">
       <div>
         <h2 className="text-lg font-semibold">素材验收</h2>
-        <p className="text-xs text-muted-foreground">上传素材文件，按实际尺寸匹配批次任务（同尺寸一张图覆盖所有渠道）</p>
+        <p className="text-xs text-muted-foreground">支持分批提交：已验收的尺寸会自动记录，重复上传会跳过</p>
       </div>
+
+      {/* Batch Progress - always visible */}
+      {batchProgress && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">批次验收进度</div>
+              <div className="text-xs text-muted-foreground">
+                累计 {batchProgress.coveredSizes}/{batchProgress.requiredSizes} 个必做尺寸
+                {batchProgress.missingSizes > 0 && ` · 还需 ${batchProgress.missingSizes} 个`}
+              </div>
+            </div>
+            {progressLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+          <Progress value={progressPercent} className="h-2" />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-center">
+              <div className="text-lg font-bold text-emerald-600">{batchProgress.coveredSizes}</div>
+              <div className="text-[10px] text-muted-foreground">已提交</div>
+            </div>
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-center">
+              <div className="text-lg font-bold text-amber-600">{batchProgress.missingSizes}</div>
+              <div className="text-[10px] text-muted-foreground">待提交</div>
+            </div>
+            <div className="rounded-md border px-2.5 py-2 text-center">
+              <div className="text-lg font-bold">{progressPercent}%</div>
+              <div className="text-[10px] text-muted-foreground">完成度</div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Upload Area - Drag & Drop */}
       <Card className="p-4">
@@ -2484,114 +2547,149 @@ function AcceptanceView({ batchId, onRefresh }: {
       </Card>
 
       {/* Results */}
-      {uploaded && (
+      {(uploaded || batchProgress) && (
         <>
           <Tabs value={resultView} onValueChange={(v) => setResultView(v as typeof resultView)}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="size" className="text-xs">
-                <Ruler className="h-3.5 w-3.5 mr-1" />
-                按尺寸分组
+              <TabsTrigger value="progress" className="text-xs">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                提交清单
               </TabsTrigger>
-              <TabsTrigger value="status" className="text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                按问题类型
+              <TabsTrigger value="session" className="text-xs" disabled={!uploaded}>
+                <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                本次验收
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="size" className="space-y-3 mt-3">
-              <div className="grid grid-cols-4 gap-2">
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{sizeSummary?.requiredSizes ?? sizeGroups.length}</div>
-                  <div className="text-[10px] text-muted-foreground">必做尺寸</div>
-                </Card>
-                <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
-                  <div className="text-lg font-bold text-emerald-600">{sizeSummary?.coveredSizes ?? passSizeCount}</div>
-                  <div className="text-[10px] text-muted-foreground">已覆盖</div>
-                </Card>
-                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
-                  <div className="text-lg font-bold text-amber-600">{sizeSummary ? sizeSummary.requiredSizes - sizeSummary.coveredSizes : issueSizeCount}</div>
-                  <div className="text-[10px] text-muted-foreground">仍缺尺寸</div>
-                </Card>
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{files.length || results.length}</div>
-                  <div className="text-[10px] text-muted-foreground">本次上传</div>
-                </Card>
-              </div>
-
-              <div className="space-y-2">
-                {sizeGroups.map(group => {
-                  const channels = Array.from(group.channels)
-                  const formats = Array.from(group.formats).sort()
-                  return (
-                    <Card key={group.key}>
-                      <CardHeader className="py-3 px-4">
-                        <div className="flex items-start justify-between gap-3">
+            <TabsContent value="progress" className="space-y-3 mt-3">
+              {batchProgress && batchProgress.coveredList.length > 0 && (
+                <Card className="border-emerald-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />已提交成功 ({batchProgress.coveredList.length})
+                    </CardTitle>
+                    <CardDescription className="text-xs">这些尺寸已验收，无需重复上传</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-56 overflow-y-auto space-y-1">
+                      {batchProgress.coveredList.map(item => (
+                        <div key={item.size} className="flex items-center justify-between text-xs bg-emerald-50 rounded px-2 py-1.5 gap-2">
                           <div className="min-w-0">
-                            <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
-                              <Ruler className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-mono">{group.sizeLabel}</span>
-                              {formats.map(format => (
-                                <Badge key={format} variant="outline" className="text-[10px] px-1.5">{format}</Badge>
-                              ))}
-                            </CardTitle>
-                            <CardDescription className="text-xs mt-1">
-                              {group.results.length} 个文件 · 覆盖 {channels.length} 个渠道
-                              {channels.length > 0 && `：${channels.slice(0, 8).join('、')}`}
-                              {channels.length > 8 && ` 等 ${channels.length} 个`}
-                            </CardDescription>
+                            <span className="font-mono font-medium">{item.size}</span>
+                            <span className="text-muted-foreground mx-1">·</span>
+                            <span>{item.specName}</span>
+                            <span className="text-muted-foreground ml-1">({item.channelCount} 渠道)</span>
                           </div>
-                          <div className="flex gap-1 shrink-0">
-                            {group.criticalCount > 0 ? (
-                              <Badge variant="outline" className="text-[10px] px-1.5 border-red-200 bg-red-50 text-red-700">
-                                尺寸不符 {group.criticalCount}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700">
-                                尺寸匹配
-                              </Badge>
-                            )}
+                          <span className="text-[10px] text-muted-foreground truncate max-w-40">{item.fileName || '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {batchProgress && batchProgress.missingList.length > 0 && (
+                <Card className="border-amber-200">
+                  <CardHeader className="py-2 px-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-sm text-amber-700 flex items-center gap-1">
+                          <AlertOctagon className="h-4 w-4" />还需提交 ({batchProgress.missingList.length})
+                        </CardTitle>
+                        <CardDescription className="text-xs">下一批请上传这些尺寸</CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={copyMissingSizes}>
+                        <Copy className="h-3 w-3 mr-1" />复制清单
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-64 overflow-y-auto space-y-1">
+                      {batchProgress.missingList.map(item => (
+                        <div key={item.size} className="flex items-center justify-between text-xs bg-amber-50 rounded px-2 py-1.5 gap-2">
+                          <div className="min-w-0">
+                            <span className="font-mono font-medium">{item.size}</span>
+                            <span className="text-muted-foreground mx-1">·</span>
+                            <span>{item.specName}</span>
+                            <span className="text-muted-foreground ml-1">({item.channelCount} 渠道)</span>
                           </div>
+                          <span className="font-mono text-[10px] text-muted-foreground">{item.format}</span>
                         </div>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-3">
-                        <div className="max-h-56 overflow-y-auto">
-                          {group.results.map((r, i) => (
-                            <AcceptanceItem key={`${group.key}-${i}`} result={r} />
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {batchProgress && batchProgress.coveredList.length === 0 && batchProgress.missingList.length === 0 && (
+                <Card className="p-6 text-center text-sm text-muted-foreground">暂无必做尺寸任务</Card>
+              )}
             </TabsContent>
 
-            <TabsContent value="status" className="space-y-3 mt-3">
-              <div className="grid grid-cols-4 gap-2">
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{results.length}</div>
-                  <div className="text-[10px] text-muted-foreground">总计</div>
+            <TabsContent value="session" className="space-y-3 mt-3">
+              {sessionSummary && (
+                <div className="grid grid-cols-4 gap-2">
+                  <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
+                    <div className="text-lg font-bold text-emerald-600">{sessionSummary.passed}</div>
+                    <div className="text-[10px] text-muted-foreground">本次新通过</div>
+                  </Card>
+                  <Card className="p-2.5 text-center border-slate-200 bg-slate-50">
+                    <div className="text-lg font-bold text-slate-600">{sessionSummary.duplicate}</div>
+                    <div className="text-[10px] text-muted-foreground">重复跳过</div>
+                  </Card>
+                  <Card className="p-2.5 text-center border-red-200 bg-red-50">
+                    <div className="text-lg font-bold text-red-600">{sessionSummary.failed}</div>
+                    <div className="text-[10px] text-muted-foreground">尺寸不符</div>
+                  </Card>
+                  <Card className="p-2.5 text-center">
+                    <div className="text-lg font-bold">{sessionSummary.total}</div>
+                    <div className="text-[10px] text-muted-foreground">本次上传</div>
+                  </Card>
+                </div>
+              )}
+
+              {passedResults.length > 0 && (
+                <Card className="border-emerald-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />本次新通过 ({passedResults.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto">
+                      {passedResults.map((r, i) => (
+                        <AcceptanceItem key={i} result={r} />
+                      ))}
+                    </div>
+                  </CardContent>
                 </Card>
-                <Card className="p-2.5 text-center border-red-200 bg-red-50">
-                  <div className="text-lg font-bold text-red-600">{criticalResults.length}</div>
-                  <div className="text-[10px] text-muted-foreground">严重</div>
+              )}
+
+              {duplicateResults.length > 0 && (
+                <Card className="border-slate-200">
+                  <CardHeader className="py-2 px-4">
+                    <CardTitle className="text-sm text-slate-600 flex items-center gap-1">
+                      <Info className="h-4 w-4" />重复跳过 ({duplicateResults.length})
+                    </CardTitle>
+                    <CardDescription className="text-xs">这些尺寸此前已提交，无需重复补充</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="max-h-48 overflow-y-auto">
+                      {duplicateResults.map((r, i) => (
+                        <AcceptanceItem key={i} result={r} />
+                      ))}
+                    </div>
+                  </CardContent>
                 </Card>
-                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
-                  <div className="text-lg font-bold text-amber-600">{normalResults.length}</div>
-                  <div className="text-[10px] text-muted-foreground">普通</div>
-                </Card>
-                <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
-                  <div className="text-lg font-bold text-emerald-600">{ignoreResults.length}</div>
-                  <div className="text-[10px] text-muted-foreground">通过/可忽略</div>
-                </Card>
-              </div>
+              )}
 
               {criticalResults.length > 0 && (
                 <Card className="border-red-200">
                   <CardHeader className="py-2 px-4">
                     <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertOctagon className="h-4 w-4" />严重问题 ({criticalResults.length})
+                      <AlertOctagon className="h-4 w-4" />尺寸不符 ({criticalResults.length})
                     </CardTitle>
+                    <CardDescription className="text-xs">这些文件尺寸不在本批次任务清单中</CardDescription>
                   </CardHeader>
                   <CardContent className="px-4 pb-3">
                     <div className="max-h-48 overflow-y-auto">
@@ -2602,99 +2700,31 @@ function AcceptanceView({ batchId, onRefresh }: {
                   </CardContent>
                 </Card>
               )}
-
-              {normalResults.length > 0 && (
-                <Card className="border-amber-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-amber-600 flex items-center gap-1">
-                      <AlertTriangle className="h-4 w-4" />普通警告 ({normalResults.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto">
-                      {normalResults.map((r, i) => (
-                        <AcceptanceItem key={i} result={r} />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {missingRequired.length > 0 && (
-                <Card className="border-red-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertOctagon className="h-4 w-4" />缺少必做尺寸 ({missingRequired.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                      {missingRequired.map((m, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
-                          <div>
-                            <span className="font-mono font-medium">{m.size || m.suggestedFileName}</span>
-                            <span className="text-muted-foreground mx-1">·</span>
-                            <span>{m.specName}</span>
-                            {m.channelCount && (
-                              <span className="text-muted-foreground ml-1">({m.channelCount} 个渠道)</span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-muted-foreground truncate max-w-60">{m.specChannel}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {ignoreResults.length > 0 && (
-                <Card className="border-emerald-200">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-sm text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="h-4 w-4" />通过 / 可忽略 ({ignoreResults.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="max-h-48 overflow-y-auto">
-                      {ignoreResults.map((r, i) => (
-                        <AcceptanceItem key={i} result={r} />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </TabsContent>
           </Tabs>
 
-          {/* Quick Re-acceptance for Failed Files */}
-          {(criticalResults.length > 0 || missingRequired.length > 0) && (
+          {(batchProgress?.missingSizes || 0) > 0 || criticalResults.length > 0 ? (
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <div className="flex-1">
-                  <div className="text-sm font-medium">需要补充</div>
+                  <div className="text-sm font-medium">继续补充</div>
                   <div className="text-xs text-muted-foreground">
-                    {criticalResults.length > 0 && `${criticalResults.length} 个尺寸不符`}
-                    {criticalResults.length > 0 && missingRequired.length > 0 && ' ·'}
-                    {missingRequired.length > 0 && `${missingRequired.length} 个必做尺寸未上传`}
+                    {criticalResults.length > 0 && `本次 ${criticalResults.length} 个尺寸不符`}
+                    {criticalResults.length > 0 && (batchProgress?.missingSizes || 0) > 0 && ' · '}
+                    {(batchProgress?.missingSizes || 0) > 0 && `还需提交 ${batchProgress?.missingSizes} 个尺寸`}
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => {
-                    // Reset file list but keep results visible as reference
-                    Object.values(previews).forEach(url => URL.revokeObjectURL(url))
-                    setFiles([])
-                    setPreviews({})
-                    setUploaded(false)
-                    toast({ title: '请上传修正后的文件', description: '只会验收此次上传的文件' })
-                    // Scroll to top of upload area
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                >
+                <Button size="sm" className="h-8 text-xs" onClick={continueSupplement}>
                   <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                  重新上传验收
+                  继续上传下一批
                 </Button>
+              </div>
+            </Card>
+          ) : batchProgress && batchProgress.requiredSizes > 0 && (
+            <Card className="p-4 border-emerald-200 bg-emerald-50">
+              <div className="flex items-center gap-2 text-sm text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" />
+                全部必做尺寸已提交完成
               </div>
             </Card>
           )}
@@ -3150,8 +3180,9 @@ function CategorizeView() {
 function SeverityBadge({ severity }: { severity: string }) {
   const config: Record<string, { label: string; cls: string }> = {
     critical: { label: '尺寸不符', cls: 'bg-red-100 text-red-700 border-red-200' },
+    duplicate: { label: '已提交', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
     normal: { label: '警告', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
-    ignore: { label: '通过', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    ignore: { label: '新通过', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   }
   const c = config[severity] || config.ignore
   return <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${c.cls}`}>{c.label}</Badge>
