@@ -91,6 +91,15 @@ interface AcceptanceResult {
   fileSize: number | null
   severity: string
   message: string
+  matchedTaskCount?: number
+  matchedChannels?: string[]
+}
+
+interface AcceptanceSizeSummary {
+  requiredSizes: number
+  coveredSizes: number
+  uploadedSizes: number
+  missingSizes: Array<{ size: string; channelCount: number; taskCount: number; channels: string }>
 }
 
 interface CategorizeData {
@@ -2106,7 +2115,8 @@ function AcceptanceView({ batchId, onRefresh }: {
 }) {
   const [files, setFiles] = useState<File[]>([])
   const [results, setResults] = useState<AcceptanceResult[]>([])
-  const [missingRequired, setMissingRequired] = useState<Array<{ id: string; specChannel: string; specName: string; suggestedFileName: string }>>([])
+  const [missingRequired, setMissingRequired] = useState<Array<{ id: string; specChannel: string; specName: string; suggestedFileName: string; size?: string; channelCount?: number; taskCount?: number }>>([])
+  const [sizeSummary, setSizeSummary] = useState<AcceptanceSizeSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [uploaded, setUploaded] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -2240,15 +2250,24 @@ function AcceptanceView({ batchId, onRefresh }: {
 
       setResults(data.results)
       setMissingRequired(data.missingRequired || [])
+      setSizeSummary(data.sizeSummary || null)
       setUploaded(true)
       setResultView('size')
       onRefresh()
 
       const criticalCount = data.results.filter((r: AcceptanceResult) => r.severity === 'critical').length
+      const summary = data.sizeSummary as AcceptanceSizeSummary | undefined
       if (criticalCount > 0) {
-        toast({ title: `验收完成: ${criticalCount} 个严重问题`, variant: 'destructive' })
+        toast({
+          title: `验收完成: ${criticalCount} 个尺寸不符`,
+          description: summary ? `已覆盖 ${summary.coveredSizes}/${summary.requiredSizes} 个必做尺寸` : undefined,
+          variant: 'destructive',
+        })
       } else {
-        toast({ title: `验收完成: ${data.results.length} 个文件通过检查` })
+        toast({
+          title: `验收完成: ${data.results.length} 个文件全部尺寸匹配`,
+          description: summary ? `覆盖 ${summary.coveredSizes}/${summary.requiredSizes} 个必做尺寸` : undefined,
+        })
       }
     } catch (err) {
       toast({
@@ -2267,6 +2286,7 @@ function AcceptanceView({ batchId, onRefresh }: {
     setFiles([])
     setResults([])
     setMissingRequired([])
+    setSizeSummary(null)
     setUploaded(false)
     setPreviews({})
     setResultView('size')
@@ -2299,7 +2319,9 @@ function AcceptanceView({ batchId, onRefresh }: {
     if (result.severity === 'critical') group.criticalCount++
     else if (result.severity === 'normal') group.normalCount++
     else group.passCount++
-    if (result.specChannel && result.specChannel !== '-') {
+    if (result.matchedChannels?.length) {
+      result.matchedChannels.forEach(ch => group.channels.add(ch))
+    } else if (result.specChannel && result.specChannel !== '-') {
       group.channels.add(result.specChannel)
     }
     return acc
@@ -2337,7 +2359,7 @@ function AcceptanceView({ batchId, onRefresh }: {
     <div className="p-4 space-y-4 max-w-5xl">
       <div>
         <h2 className="text-lg font-semibold">素材验收</h2>
-        <p className="text-xs text-muted-foreground">上传素材文件，自动校验尺寸、格式、大小</p>
+        <p className="text-xs text-muted-foreground">上传素材文件，按实际尺寸匹配批次任务（同尺寸一张图覆盖所有渠道）</p>
       </div>
 
       {/* Upload Area - Drag & Drop */}
@@ -2477,18 +2499,22 @@ function AcceptanceView({ batchId, onRefresh }: {
             </TabsList>
 
             <TabsContent value="size" className="space-y-3 mt-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{sizeGroups.length}</div>
-                  <div className="text-[10px] text-muted-foreground">独立尺寸数</div>
-                </Card>
-                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
-                  <div className="text-lg font-bold text-amber-600">{issueSizeCount}</div>
-                  <div className="text-[10px] text-muted-foreground">有问题尺寸</div>
+                  <div className="text-lg font-bold">{sizeSummary?.requiredSizes ?? sizeGroups.length}</div>
+                  <div className="text-[10px] text-muted-foreground">必做尺寸</div>
                 </Card>
                 <Card className="p-2.5 text-center border-emerald-200 bg-emerald-50">
-                  <div className="text-lg font-bold text-emerald-600">{passSizeCount}</div>
-                  <div className="text-[10px] text-muted-foreground">通过尺寸</div>
+                  <div className="text-lg font-bold text-emerald-600">{sizeSummary?.coveredSizes ?? passSizeCount}</div>
+                  <div className="text-[10px] text-muted-foreground">已覆盖</div>
+                </Card>
+                <Card className="p-2.5 text-center border-amber-200 bg-amber-50">
+                  <div className="text-lg font-bold text-amber-600">{sizeSummary ? sizeSummary.requiredSizes - sizeSummary.coveredSizes : issueSizeCount}</div>
+                  <div className="text-[10px] text-muted-foreground">仍缺尺寸</div>
+                </Card>
+                <Card className="p-2.5 text-center">
+                  <div className="text-lg font-bold">{files.length || results.length}</div>
+                  <div className="text-[10px] text-muted-foreground">本次上传</div>
                 </Card>
               </div>
 
@@ -2509,21 +2535,21 @@ function AcceptanceView({ batchId, onRefresh }: {
                               ))}
                             </CardTitle>
                             <CardDescription className="text-xs mt-1">
-                              {group.results.length} 个文件 · 涉及渠道 {channels.length}
-                              {channels.length > 0 && `：${channels.slice(0, 6).join('、')}`}
-                              {channels.length > 6 && ` 等 ${channels.length} 个`}
+                              {group.results.length} 个文件 · 覆盖 {channels.length} 个渠道
+                              {channels.length > 0 && `：${channels.slice(0, 8).join('、')}`}
+                              {channels.length > 8 && ` 等 ${channels.length} 个`}
                             </CardDescription>
                           </div>
                           <div className="flex gap-1 shrink-0">
-                            <Badge variant="outline" className="text-[10px] px-1.5 border-red-200 bg-red-50 text-red-700">
-                              严重 {group.criticalCount}
-                            </Badge>
-                            <Badge variant="outline" className="text-[10px] px-1.5 border-amber-200 bg-amber-50 text-amber-700">
-                              警告 {group.normalCount}
-                            </Badge>
-                            <Badge variant="outline" className="text-[10px] px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700">
-                              通过 {group.passCount}
-                            </Badge>
+                            {group.criticalCount > 0 ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 border-red-200 bg-red-50 text-red-700">
+                                尺寸不符 {group.criticalCount}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700">
+                                尺寸匹配
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </CardHeader>
@@ -2598,7 +2624,7 @@ function AcceptanceView({ batchId, onRefresh }: {
                 <Card className="border-red-200">
                   <CardHeader className="py-2 px-4">
                     <CardTitle className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertOctagon className="h-4 w-4" />缺少必做素材 ({missingRequired.length})
+                      <AlertOctagon className="h-4 w-4" />缺少必做尺寸 ({missingRequired.length})
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-3">
@@ -2606,11 +2632,14 @@ function AcceptanceView({ batchId, onRefresh }: {
                       {missingRequired.map((m, i) => (
                         <div key={i} className="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1.5">
                           <div>
-                            <span className="font-medium">{m.specChannel}</span>
-                            <span className="text-muted-foreground mx-1">-</span>
+                            <span className="font-mono font-medium">{m.size || m.suggestedFileName}</span>
+                            <span className="text-muted-foreground mx-1">·</span>
                             <span>{m.specName}</span>
+                            {m.channelCount && (
+                              <span className="text-muted-foreground ml-1">({m.channelCount} 个渠道)</span>
+                            )}
                           </div>
-                          <span className="font-mono text-[10px] text-muted-foreground truncate max-w-60">{m.suggestedFileName}</span>
+                          <span className="text-[10px] text-muted-foreground truncate max-w-60">{m.specChannel}</span>
                         </div>
                       ))}
                     </div>
@@ -2638,15 +2667,15 @@ function AcceptanceView({ batchId, onRefresh }: {
           </Tabs>
 
           {/* Quick Re-acceptance for Failed Files */}
-          {(criticalResults.length > 0 || normalResults.length > 0) && (
+          {(criticalResults.length > 0 || missingRequired.length > 0) && (
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <div className="flex-1">
-                  <div className="text-sm font-medium">需要返工</div>
+                  <div className="text-sm font-medium">需要补充</div>
                   <div className="text-xs text-muted-foreground">
-                    {criticalResults.length > 0 && ` ${criticalResults.length} 个严重`}
-                    {criticalResults.length > 0 && normalResults.length > 0 && ' ·'}
-                    {normalResults.length > 0 && ` ${normalResults.length} 个警告`}
+                    {criticalResults.length > 0 && `${criticalResults.length} 个尺寸不符`}
+                    {criticalResults.length > 0 && missingRequired.length > 0 && ' ·'}
+                    {missingRequired.length > 0 && `${missingRequired.length} 个必做尺寸未上传`}
                   </div>
                 </div>
                 <Button
@@ -3120,9 +3149,9 @@ function CategorizeView() {
 // ========== Helper Components ==========
 function SeverityBadge({ severity }: { severity: string }) {
   const config: Record<string, { label: string; cls: string }> = {
-    critical: { label: '严重', cls: 'bg-red-100 text-red-700 border-red-200' },
-    normal: { label: '普通', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
-    ignore: { label: '可忽略', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    critical: { label: '尺寸不符', cls: 'bg-red-100 text-red-700 border-red-200' },
+    normal: { label: '警告', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+    ignore: { label: '通过', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   }
   const c = config[severity] || config.ignore
   return <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${c.cls}`}>{c.label}</Badge>
@@ -3166,9 +3195,11 @@ function AcceptanceItem({ result }: { result: AcceptanceResult }) {
       <div className="min-w-0">
         <div className="font-mono truncate">{result.fileName}</div>
         <div className="text-muted-foreground mt-0.5">
-          匹配: {result.specChannel} - {result.specName}
-          {result.fileWidth && result.fileHeight && ` (${result.fileWidth}x${result.fileHeight} ${result.fileFormat || ''})`}
-          {result.fileSize && ` | ${result.fileSize}KB`}
+          {result.matchedTaskCount
+            ? `覆盖 ${result.matchedTaskCount} 项任务 · ${result.matchedChannels?.length || 0} 个渠道`
+            : `匹配: ${result.specChannel} - ${result.specName}`}
+          {result.fileWidth && result.fileHeight && ` · ${result.fileWidth}x${result.fileHeight}`}
+          {result.fileFormat && ` ${result.fileFormat}`}
         </div>
       </div>
       <div className="shrink-0 text-right">
