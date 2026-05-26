@@ -6,6 +6,14 @@ import {
   Search, Settings2, Upload, X
 } from 'lucide-react'
 import { parseStoredOutputFormat } from '@/lib/crop-utils'
+import {
+  findBestMasterGroupForSource,
+  findMasterGroupForTargetSize,
+  getAllMasterSizeKeys,
+  getMasterRatio,
+  MASTER_GROUPS,
+  type MasterGroup,
+} from '@/lib/banner-master-groups'
 import { cn } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
@@ -41,16 +49,6 @@ interface BannerSize {
   width: number
   height: number
   label: string
-}
-
-interface MasterGroup {
-  id: string
-  code: string
-  label: string
-  master: string
-  masterFileName: string
-  description: string
-  sizes: string[]
 }
 
 interface BannerOutput {
@@ -102,84 +100,9 @@ const RAW_BANNER_SIZE_PRESETS = [
   '2000x1000', '2200x800', '2400x1000',
 ]
 
-const MASTER_GROUPS: MasterGroup[] = [
-  {
-    id: 'wide-16-9',
-    code: '01',
-    label: '1920x1080 横版主图母版',
-    master: '1920x1080',
-    masterFileName: '01_1920x1080_landscape_main.png',
-    description: '16:9 横版，适合主视觉横图',
-    sizes: ['640x360', '800x450', '960x540', '1024x576', '1080x608', '1280x720', '1920x1080'],
-  },
-  {
-    id: 'long-banner',
-    code: '02',
-    label: '1920x640 长条横幅母版',
-    master: '1920x640',
-    masterFileName: '02_1920x640_wide_banner.png',
-    description: '3:1 长条横幅，适合顶部 Banner 和推广长条',
-    sizes: ['750x250', '900x300', '970x340', '1000x300', '1008x372', '1200x400', '1920x452', '1920x500', '1920x600', '1920x640'],
-  },
-  {
-    id: 'portrait-9-16',
-    code: '03',
-    label: '1080x1920 手机竖版母版',
-    master: '1080x1920',
-    masterFileName: '03_1080x1920_vertical_9x16.png',
-    description: '9:16 竖版，适合手机竖屏广告、H5 分享图',
-    sizes: ['360x640', '720x1280', '750x1334', '750x1350', '1080x1800', '1080x1920', '1080x2160', '1080x2400'],
-  },
-  {
-    id: 'square',
-    code: '04',
-    label: '1024x1024 方图母版',
-    master: '1024x1024',
-    masterFileName: '04_1024x1024_square.png',
-    description: '1:1 方图，适合 Icon、方形广告、方图封面',
-    sizes: ['175x175', '450x450', '640x640', '750x750', '800x800', '984x984', '1024x1024', '1080x1080'],
-  },
-  {
-    id: 'wide-2-1',
-    code: '05',
-    label: '2000x1000 2:1 宽横版母版',
-    master: '2000x1000',
-    masterFileName: '05_2000x1000_ratio_2x1.png',
-    description: '2:1 宽横版，适合宽横版广告、详情页横图',
-    sizes: ['500x250', '600x300', '700x360', '720x350', '900x450', '1000x500', '1020x510', '2000x1000', '2400x1000'],
-  },
-  {
-    id: 'portrait-medium',
-    code: '06',
-    label: '1080x1440 中竖版母版',
-    master: '1080x1440',
-    masterFileName: '06_1080x1440_vertical_3x4.png',
-    description: '3:4 / 4:5 附近，适合普通中竖版素材',
-    sizes: ['720x890', '750x920', '880x1200', '900x1200', '1080x1440'],
-  },
-  {
-    id: 'portrait-narrow',
-    code: '07',
-    label: '1080x1600 窄中竖版母版',
-    master: '1080x1600',
-    masterFileName: '07_1080x1600_vertical_narrow.png',
-    description: '约 0.675 比例，比 1080x1440 更高更窄的中竖版',
-    sizes: ['834x1236', '1080x1560'],
-  },
-  {
-    id: 'special-750x1252',
-    code: '08',
-    label: '750x1252 专用竖版母版',
-    master: '750x1252',
-    masterFileName: '08_750x1252_special_vertical.png',
-    description: '专用比例，避免 Logo、主标题、福利图标被裁',
-    sizes: ['750x1252'],
-  },
-]
-
 const BANNER_SIZE_PRESETS: BannerSize[] = Array.from(new Set([
   ...RAW_BANNER_SIZE_PRESETS,
-  ...MASTER_GROUPS.flatMap(group => [group.master, ...group.sizes]),
+  ...getAllMasterSizeKeys(),
 ]))
   .map(label => {
     const [width, height] = label.split('x').map(Number)
@@ -267,68 +190,8 @@ function getFocalRatio(point: FocalPoint) {
   return 0.5
 }
 
-function parseSize(label: string) {
-  const [width, height] = label.split('x').map(Number)
-  return { width, height }
-}
-
-function getMasterRatio(group: MasterGroup) {
-  const master = parseSize(group.master)
-  return master.width / master.height
-}
-
-function getMasterGroupById(id: string) {
-  return MASTER_GROUPS.find(group => group.id === id) || MASTER_GROUPS[0]
-}
-
-function matchMasterGroupByRatio(width: number, height: number): MasterGroup | null {
-  const sizeKey = `${width}x${height}`
-  if (sizeKey === '750x1252') return getMasterGroupById('special-750x1252')
-
-  const ratio = width / height
-  if (ratio >= 1.65 && ratio <= 1.85) return getMasterGroupById('wide-16-9')
-  if (ratio >= 2.75 && ratio <= 3.20) return getMasterGroupById('long-banner')
-  if (ratio >= 1.90 && ratio <= 2.15) return getMasterGroupById('wide-2-1')
-  if (ratio >= 0.95 && ratio <= 1.05) return getMasterGroupById('square')
-  if (ratio >= 0.54 && ratio <= 0.60) return getMasterGroupById('portrait-9-16')
-  if (ratio >= 0.72 && ratio <= 0.82) return getMasterGroupById('portrait-medium')
-  if (ratio >= 0.65 && ratio <= 0.70) return getMasterGroupById('portrait-narrow')
-  return null
-}
-
-function findMasterGroupForTargetSize(width: number, height: number) {
-  const sizeKey = `${width}x${height}`
-  const owner = MASTER_GROUPS.find(group => group.sizes.includes(sizeKey))
-  if (owner) return owner
-
-  const exactMaster = MASTER_GROUPS.find(group => group.master === sizeKey)
-  if (exactMaster) return exactMaster
-
-  const ratioMatch = matchMasterGroupByRatio(width, height)
-  if (ratioMatch) return ratioMatch
-
-  return MASTER_GROUPS.reduce((best, group) => {
-    const targetRatio = width / height
-    const bestDiff = Math.abs(targetRatio - getMasterRatio(best))
-    const groupDiff = Math.abs(targetRatio - getMasterRatio(group))
-    return groupDiff < bestDiff ? group : best
-  }, MASTER_GROUPS[0])
-}
-
 function findBestMasterGroup(source: BannerSource) {
-  const sourceKey = `${source.width}x${source.height}`
-  const exactMatch = MASTER_GROUPS.find(group => group.master === sourceKey)
-  if (exactMatch) return exactMatch
-
-  const ratioMatch = matchMasterGroupByRatio(source.width, source.height)
-  if (ratioMatch) return ratioMatch
-
-  const sourceRatio = source.width / source.height
-  return MASTER_GROUPS.reduce((best, group) => {
-    const bestDiff = Math.abs(sourceRatio - getMasterRatio(best))
-    const groupDiff = Math.abs(sourceRatio - getMasterRatio(group))
-    return groupDiff < bestDiff ? group : best
-  }, MASTER_GROUPS[0])
+  return findBestMasterGroupForSource(source.width, source.height)
 }
 
 function getUniquePath(path: string, usedPaths: Set<string>) {
@@ -549,23 +412,48 @@ export default function BannerCropView() {
     .map(key => sizeByKey.get(key))
     .filter((size): size is BannerSize => Boolean(size))
 
-  const sourcePlans = useMemo(() => sources.map(source => {
-    const group = findBestMasterGroup(source)
-    return { source, group, sizes: getGroupSizes(group) }
-  }), [sources, sizeByKey])
+  const sourcePlans = useMemo(() => sources.map(source => ({
+    source,
+    group: findBestMasterGroup(source),
+  })), [sources])
 
   const activeMasterGroup = MASTER_GROUPS.find(group => group.id === activeMasterGroupId) || MASTER_GROUPS[0]
   const activeMasterGroupSizes = getGroupSizes(activeMasterGroup)
-  const activeSizeList = outputScope === 'autoMaster' ? activeMasterGroupSizes : selectedSizeList
+  const activeSizeList = useMemo(() => {
+    if (outputScope === 'autoMaster') return activeMasterGroupSizes
+    return selectedSizeList.filter(size =>
+      activeMasterGroup.sizes.includes(size.key)
+      || findMasterGroupForTargetSize(size.width, size.height).id === activeMasterGroup.id
+    )
+  }, [outputScope, activeMasterGroupSizes, activeMasterGroup, selectedSizeList])
   const sourcePlanById = useMemo(() => new Map(sourcePlans.map(plan => [plan.source.id, plan])), [sourcePlans])
 
-  const scopeSizes = useMemo(() => {
-    if (outputScope !== 'autoMaster' || sources.length === 0) return allSizes
-    if (sources.length === 1) return activeMasterGroupSizes.length > 0 ? activeMasterGroupSizes : allSizes
-    const keys = new Set<string>()
-    sourcePlans.forEach(plan => plan.sizes.forEach(size => keys.add(size.key)))
-    return allSizes.filter(size => keys.has(size.key))
-  }, [allSizes, outputScope, sources.length, activeMasterGroupSizes, sourcePlans])
+  const getMasterSourceForGroup = (group: MasterGroup) => {
+    const groupSources = sources.filter(source => findBestMasterGroup(source).id === group.id)
+    return groupSources.find(source => `${source.width}x${source.height}` === group.master) || groupSources[0]
+  }
+
+  const generationPlans = useMemo(() => {
+    if (sources.length === 0) return []
+
+    if (outputScope === 'autoMaster') {
+      return MASTER_GROUPS.flatMap(group => {
+        const sizes = getGroupSizes(group)
+        if (sizes.length === 0) return []
+        const source = getMasterSourceForGroup(group)
+        if (!source) return []
+        return [{ source, group, sizes }]
+      })
+    }
+
+    const sizes = activeSizeList
+    if (sizes.length === 0) return []
+    const source = getMasterSourceForGroup(activeMasterGroup)
+    if (!source) return []
+    return [{ source, group: activeMasterGroup, sizes }]
+  }, [sources, outputScope, activeMasterGroup, activeSizeList, sizeByKey])
+
+  const scopeSizes = useMemo(() => activeMasterGroupSizes, [activeMasterGroupSizes])
 
   const filteredSizes = useMemo(() => {
     const keyword = sizeSearch.trim().toLowerCase()
@@ -578,13 +466,17 @@ export default function BannerCropView() {
   const selectedLandscapeCount = activeSizeList.filter(size => size.width > size.height).length
   const selectedPortraitCount = activeSizeList.filter(size => size.width < size.height).length
   const selectedSquareCount = activeSizeList.filter(size => size.width === size.height).length
-  const totalOutputCount = useMemo(() => {
-    if (sources.length === 0) return 0
+  const totalOutputCount = useMemo(
+    () => generationPlans.reduce((sum, plan) => sum + plan.sizes.length, 0),
+    [generationPlans]
+  )
+  const missingMasterGroups = useMemo(() => {
+    if (sources.length === 0) return []
     if (outputScope === 'autoMaster') {
-      return sourcePlans.reduce((sum, plan) => sum + plan.sizes.length, 0)
+      return MASTER_GROUPS.filter(group => getGroupSizes(group).length > 0 && !getMasterSourceForGroup(group))
     }
-    return sources.length * activeSizeList.length
-  }, [sources.length, outputScope, sourcePlans, activeSizeList.length])
+    return getMasterSourceForGroup(activeMasterGroup) ? [] : [activeMasterGroup]
+  }, [sources, outputScope, activeMasterGroup, sizeByKey])
   const hasMixedMasterGroups = outputScope === 'autoMaster'
     && sources.length > 1
     && new Set(sourcePlans.map(plan => plan.group.id)).size > 1
@@ -847,7 +739,20 @@ export default function BannerCropView() {
   }
 
   const handleGenerate = async () => {
-    if (sources.length === 0 || totalOutputCount === 0 || isGenerating) return
+    if (sources.length === 0 || isGenerating) return
+
+    const plans = generationPlans
+    if (plans.length === 0 || totalOutputCount === 0) {
+      const missingLabels = missingMasterGroups.map(group => group.label)
+      toast({
+        title: '缺少母版图',
+        description: missingLabels.length > 0
+          ? `请先上传对应母版：${missingLabels.slice(0, 3).join('、')}${missingLabels.length > 3 ? ` 等 ${missingLabels.length} 类` : ''}`
+          : '请先上传与当前分类匹配的母版原图',
+        variant: 'destructive',
+      })
+      return
+    }
 
     clearOutputs()
     setIsGenerating(true)
@@ -858,51 +763,6 @@ export default function BannerCropView() {
     const outputExt = getExtension(outputFormat)
     let done = 0
     let failed = 0
-
-    type OutputGroup = MasterGroup | {
-      id: string
-      code: string
-      label: string
-      master: string
-      description: string
-      sizes: string[]
-    }
-
-    let plans: Array<{ source: BannerSource; group: OutputGroup; sizes: BannerSize[] }>
-
-    if (outputScope === 'autoMaster') {
-      plans = sourcePlans.map(plan => ({
-        source: plan.source,
-        group: plan.group,
-        sizes: plan.sizes,
-      }))
-    } else {
-      const groupSizes = getGroupSizes(activeMasterGroup)
-      const isExactGroupSelection = selectedSizeList.length === groupSizes.length
-        && groupSizes.every(size => selectedSizes.has(size.key))
-      if (isExactGroupSelection) {
-        plans = sources.map(source => ({
-          source,
-          group: activeMasterGroup,
-          sizes: activeSizeList,
-        }))
-      } else {
-        plans = sources.flatMap(source => {
-          const sizesByGroup = new Map<string, BannerSize[]>()
-          for (const size of activeSizeList) {
-            const sizeGroup = findMasterGroupForTargetSize(size.width, size.height)
-            if (!sizesByGroup.has(sizeGroup.id)) sizesByGroup.set(sizeGroup.id, [])
-            sizesByGroup.get(sizeGroup.id)!.push(size)
-          }
-          return [...sizesByGroup.values()].map(sizes => ({
-            source,
-            group: findMasterGroupForTargetSize(sizes[0].width, sizes[0].height),
-            sizes,
-          }))
-        })
-      }
-    }
-
     const total = plans.reduce((sum, plan) => sum + plan.sizes.length, 0)
 
     for (const plan of plans) {
@@ -911,15 +771,18 @@ export default function BannerCropView() {
         try {
           const blob = await drawBanner(source, size)
           const safeBaseName = sanitizeName(source.baseName)
-          const sizeGroup = 'code' in group ? group : findMasterGroupForTargetSize(size.width, size.height)
+          const sizeGroup = findMasterGroupForTargetSize(size.width, size.height)
           const fileName = `${sizeGroup.code}_${size.label}.${outputExt}`
-          const groupFolder = sanitizeName(sizeGroup.label)
-          const useNestedPath = sources.length > 1 || outputScope === 'autoMaster'
+          const groupFolder = sanitizeName(group.label)
+          const useNestedPath = plans.length > 1 || sizes.length > 1
           const rawPath = useNestedPath
             ? `${groupFolder}/${fileName}`
             : fileName
           const path = getUniquePath(rawPath, usedPaths)
           const url = URL.createObjectURL(blob)
+
+          if (blob.size === 0) throw new Error('输出文件为空')
+
           nextOutputs.push({
             id: `${source.id}-${size.key}`,
             sourceId: source.id,
@@ -949,10 +812,18 @@ export default function BannerCropView() {
 
     setOutputs(nextOutputs)
     setIsGenerating(false)
+
+    const skippedCount = missingMasterGroups.length
     if (failed > 0) {
       toast({
         title: `生成完成: ${nextOutputs.length} 个文件，${failed} 个失败`,
+        description: skippedCount > 0 ? `另有 ${skippedCount} 个分类因缺少母版未生成` : undefined,
         variant: 'destructive',
+      })
+    } else if (skippedCount > 0) {
+      toast({
+        title: `生成完成: ${nextOutputs.length} 个文件`,
+        description: `${skippedCount} 个分类因缺少母版已跳过`,
       })
     } else {
       toast({ title: `生成完成: ${nextOutputs.length} 个文件` })
@@ -1068,15 +939,9 @@ export default function BannerCropView() {
                     <div className="text-[10px] text-muted-foreground">原图</div>
                   </div>
                   <div className="flex-1 py-2 px-1">
-                    <div className="text-base font-semibold tabular-nums">
-                      {outputScope === 'autoMaster' && sources.length > 1
-                        ? new Set(sourcePlans.map(plan => plan.group.id)).size
-                        : activeSizeList.length}
-                    </div>
+                    <div className="text-base font-semibold tabular-nums">{activeSizeList.length}</div>
                     <div className="text-[10px] text-muted-foreground">
-                      {outputScope === 'autoMaster'
-                        ? (sources.length > 1 ? '自动母版' : '分类尺寸')
-                        : '手选尺寸'}
+                      {outputScope === 'autoMaster' ? '分类尺寸' : '手选尺寸'}
                     </div>
                   </div>
                   <div className="flex-1 py-2 px-1">
@@ -1202,49 +1067,61 @@ export default function BannerCropView() {
               </div>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-2 min-[1728px]:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-3 min-[1728px]:grid-cols-4 gap-3">
                 {MASTER_GROUPS.map(group => {
                   const groupSizes = getGroupSizes(group)
                   const ratio = getMasterRatio(group)
+                  const hasMaster = Boolean(getMasterSourceForGroup(group))
                   const isSelected = activeMasterGroupId === group.id
-                    || (outputScope === 'manual'
-                      && groupSizes.length > 0
-                      && groupSizes.every(size => selectedSizes.has(size.key))
-                      && selectedSizeList.length === groupSizes.length)
                   return (
                     <button
                       key={group.id}
                       type="button"
                       onClick={() => selectMasterGroup(group)}
-                      title={group.masterFileName}
+                      title={`建议母版文件：${group.masterFileName}`}
                       className={cn(
                         'text-left rounded-xl border p-3.5 transition-all',
                         isSelected
-                          ? 'border-foreground bg-foreground text-background shadow-md'
+                          ? 'border-foreground bg-foreground text-background shadow-md ring-1 ring-foreground'
                           : 'border-border/80 bg-card hover:border-foreground/35 hover:shadow-sm'
                       )}
                     >
-                      <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                          <div className={cn(
+                            'text-[10px] font-semibold tracking-wider',
+                            isSelected ? 'text-background/70' : 'text-muted-foreground'
+                          )}>
+                            {group.code}_{group.master}
+                          </div>
+                          <div className={cn(
+                            'text-sm font-medium mt-0.5 leading-snug',
+                            isSelected ? 'text-background' : 'text-foreground'
+                          )}>
+                            {group.label}
+                          </div>
+                        </div>
                         <span className={cn(
-                          'text-[10px] font-semibold tracking-wider uppercase',
-                          isSelected ? 'text-background/70' : 'text-muted-foreground'
+                          'shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border',
+                          hasMaster
+                            ? isSelected ? 'border-background/40 bg-background/20' : 'border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                            : isSelected ? 'border-background/40 bg-background/20' : 'border-amber-600/30 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
                         )}>
-                          母版 {group.code}
+                          {hasMaster ? '已有母版' : '缺母版'}
                         </span>
-                        <span className="font-mono text-sm font-bold tabular-nums">{group.master}</span>
                       </div>
                       <p className={cn(
-                        'text-xs leading-snug line-clamp-2',
-                        isSelected ? 'text-background/90' : 'text-foreground'
+                        'text-[11px] leading-relaxed',
+                        isSelected ? 'text-background/85' : 'text-muted-foreground'
                       )}>
-                        {group.description}
+                        <span className="block">比例：{group.ratioLabel}（{ratio.toFixed(2)} : 1）</span>
+                        <span className="block mt-0.5">用途：{group.usage}</span>
                       </p>
                       <div className={cn(
-                        'mt-2.5 flex items-center justify-between text-[10px]',
-                        isSelected ? 'text-background/75' : 'text-muted-foreground'
+                        'mt-2 text-[10px] font-medium',
+                        isSelected ? 'text-background/80' : 'text-muted-foreground'
                       )}>
-                        <span>比例 {ratio.toFixed(2)} : 1</span>
-                        <span>{groupSizes.length} 个覆盖尺寸</span>
+                        覆盖 {groupSizes.length} 个目标尺寸
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {groupSizes.slice(0, 6).map(size => (
@@ -1285,9 +1162,9 @@ export default function BannerCropView() {
                     尺寸预设
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    {outputScope === 'autoMaster'
-                      ? `${scopeSizes.length} 个当前分类尺寸 · 预计输出 ${totalOutputCount} 个`
-                      : `${allSizes.length} 个唯一尺寸 · 已选 ${selectedSizeList.length} 个`}
+                    {activeMasterGroup.label} · {scopeSizes.length} 个尺寸
+                    {outputScope === 'manual' && ` · 已选 ${activeSizeList.length} 个`}
+                    {' · '}预计输出 {totalOutputCount} 个
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1349,7 +1226,7 @@ export default function BannerCropView() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 min-[1728px]:grid-cols-6 gap-2 max-h-72 overflow-y-auto pr-1">
                 {filteredSizes.map(size => {
                   const checked = outputScope === 'autoMaster'
-                    ? sourcePlans.some(plan => plan.sizes.some(activeSize => activeSize.key === size.key))
+                    ? activeMasterGroup.sizes.includes(size.key)
                     : selectedSizes.has(size.key)
                   return (
                     <button
