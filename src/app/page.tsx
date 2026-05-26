@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 import IconCropView from '@/components/icon-crop-view'
+import BannerCropView from '@/components/banner-crop-view'
 import ImageFormatConverterView from '@/components/image-format-converter-view'
 import ProductionBoardView from '@/components/production-board-view'
 import SizeBasedWorkflowView from '@/components/size-based-workflow-view'
@@ -715,6 +716,7 @@ export default function WorkflowApp() {
             { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
             { id: 'logs', label: '更新日志', icon: ScrollText },
             { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
+            { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
             { id: 'imageConvert', label: '格式转换', icon: FileDown },
           ].map(item => (
             <button
@@ -800,6 +802,9 @@ export default function WorkflowApp() {
         )}
         {activeTab === 'iconCrop' && (
           <IconCropView />
+        )}
+        {activeTab === 'bannerCrop' && (
+          <BannerCropView />
         )}
         {activeTab === 'imageConvert' && (
           <ImageFormatConverterView />
