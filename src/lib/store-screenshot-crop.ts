@@ -3,7 +3,9 @@ import {
   STORE_SCREENSHOT_SLOTS,
   STORE_ZIP_ROOT,
   type StoreOutputSize,
+  type StoreScreenshotMaster,
 } from '@/data/store-screenshot-spec'
+import { getStoreMasterZipBasename } from '@/lib/store-screenshot-masters'
 
 export interface StoreCropAdjust {
   /** 裁剪中心点（源图归一化 0~1） */
@@ -169,37 +171,37 @@ export function buildStoreOutputPath(sizeKey: string, slotFileName: string) {
   return `${STORE_ZIP_ROOT}/${sizeKey}/${slotFileName}.png`
 }
 
-function sortSizeLabel(a: string, b: string) {
-  const [aw, ah] = a.split('x').map(Number)
-  const [bw, bh] = b.split('x').map(Number)
-  return aw - bw || ah - bh
-}
+export type StoreZipPackMode = 'current' | 'all'
 
-/** ZIP 文件名按所含尺寸命名，例如 store-screenshot_1080x1920_360x640+720x1280_20files.zip */
+/** 下载 ZIP 文件名：当前母版以母版命名，全部尺寸用固定前缀 */
 export function buildStoreScreenshotZipFileName(
   outputs: StoreScreenshotOutput[],
-  options?: { masterKey?: string }
+  options: { mode: StoreZipPackMode; master?: StoreScreenshotMaster }
 ) {
-  if (outputs.length === 0) return `${STORE_ZIP_ROOT}.zip`
-
-  const uniqueSizes = [...new Set(outputs.map(output => output.sizeKey))].sort(sortSizeLabel)
   const count = outputs.length
+  if (count === 0) return 'store-screenshot.zip'
 
-  let sizeTag: string
-  if (uniqueSizes.length <= 5) {
-    sizeTag = uniqueSizes.join('+')
-  } else {
-    sizeTag = `${uniqueSizes[0]}_to_${uniqueSizes[uniqueSizes.length - 1]}_${uniqueSizes.length}sizes`
+  if (options.mode === 'all' || !options.master) {
+    return `store-screenshot_全部12尺寸_${count}files.zip`
   }
 
-  const masterTag = options?.masterKey ? `_${options.masterKey}` : ''
-  let fileName = `store-screenshot${masterTag}_${sizeTag}_${count}files.zip`
-
+  const base = getStoreMasterZipBasename(options.master)
+  let fileName = `${base}_${count}files.zip`
   if (fileName.length > 220) {
-    fileName = `store-screenshot${masterTag}_${uniqueSizes.length}sizes_${count}files.zip`
+    fileName = `${options.master.master}_${options.master.code}_${count}files.zip`
   }
-
   return fileName
+}
+
+/** ZIP 内根目录名（与压缩包主名一致） */
+export function getStoreScreenshotZipRootFolder(options: {
+  mode: StoreZipPackMode
+  master?: StoreScreenshotMaster
+}) {
+  if (options.mode === 'all' || !options.master) {
+    return STORE_ZIP_ROOT
+  }
+  return getStoreMasterZipBasename(options.master)
 }
 
 export async function generateStoreScreenshotOutputs(

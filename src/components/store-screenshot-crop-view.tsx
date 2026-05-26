@@ -20,6 +20,7 @@ import {
   drawStoreScreenshotCrop,
   formatBytes,
   buildStoreScreenshotZipFileName,
+  getStoreScreenshotZipRootFolder,
   generateAllStoreScreenshotOutputs,
   generateStoreScreenshotOutputs,
   readStoreScreenshotSource,
@@ -372,21 +373,36 @@ export default function StoreScreenshotCropView() {
     }
   }
 
+  const zipPackOptions = useMemo(
+    () => ({
+      mode: lastGenerateMode,
+      master: lastGenerateMode === 'current' ? activeMaster : undefined,
+    }),
+    [lastGenerateMode, activeMaster]
+  )
+
+  const zipRootFolder = useMemo(
+    () => getStoreScreenshotZipRootFolder(zipPackOptions),
+    [zipPackOptions]
+  )
+
+  const zipFileName = useMemo(
+    () => (outputs.length > 0 ? buildStoreScreenshotZipFileName(outputs, zipPackOptions) : null),
+    [outputs, zipPackOptions]
+  )
+
   const downloadZip = async () => {
     if (outputs.length === 0 || isZipping) return
     setIsZipping(true)
     try {
       const zip = new JSZip()
-      const root = zip.folder(STORE_ZIP_ROOT)
+      const root = zip.folder(zipRootFolder)
       outputs.forEach(output => {
         const folder = root?.folder(output.sizeKey)
         folder?.file(output.name, output.blob)
       })
       const blob = await zip.generateAsync({ type: 'blob' })
-      const zipName = buildStoreScreenshotZipFileName(outputs, {
-        masterKey: lastGenerateMode === 'current' ? effectiveMasterKey : undefined,
-      })
-      saveAs(blob, zipName)
+      saveAs(blob, zipFileName || buildStoreScreenshotZipFileName(outputs, zipPackOptions))
     } finally {
       setIsZipping(false)
     }
@@ -785,7 +801,10 @@ export default function StoreScreenshotCropView() {
               <CardHeader className="px-4 pt-4 pb-2 flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-sm font-medium">生成结果</CardTitle>
-                  <CardDescription className="text-xs">{STORE_ZIP_ROOT}/尺寸/01~05.png</CardDescription>
+                  <CardDescription className="text-xs">
+                    {zipRootFolder}/尺寸/01~05.png
+                    {zipFileName && <span className="block mt-0.5 text-muted-foreground">ZIP：{zipFileName}</span>}
+                  </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" className="h-7 text-xs" disabled={isZipping} onClick={() => void downloadZip()}>
                   <Download className="h-3 w-3 mr-1" />ZIP

@@ -53,3 +53,10 @@ export function findBestStoreMasterForSource(width: number, height: number): Sto
 export function formatStoreMasterLabel(master: StoreScreenshotMaster) {
   return `${master.master}｜${master.ratioLabel} ${master.label}`
 }
+
+/** ZIP 文件名 / 包内根目录：以母版命名 */
+export function getStoreMasterZipBasename(master: StoreScreenshotMaster) {
+  const ratio = master.ratioLabel.replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g, '')
+  const label = master.label.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '')
+  return `${master.master}_${ratio}_${label}`
+}
