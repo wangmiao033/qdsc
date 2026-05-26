@@ -120,12 +120,21 @@ function sortSizeLabel(a: string, b: string) {
   return aw - bw || ah - bh
 }
 
-export function buildBannerZipFileName(outputs: BannerOutput[]) {
+export function buildBannerZipFileName(outputs: BannerOutput[], options?: { flatPack?: boolean }) {
   if (outputs.length === 0) return 'banner_crop_batch.zip'
 
   const uniqueSizes = [...new Set(outputs.map(output => `${output.width}x${output.height}`))]
     .sort(sortSizeLabel)
   const uniqueSources = [...new Set(outputs.map(output => output.sourceBaseName))]
+  const isFlatPack = options?.flatPack ?? outputs.every(output => !output.path.includes('/'))
+
+  if (isFlatPack) {
+    if (uniqueSources.length > 1) {
+      return `banner_crop_${outputs.length}files_${uniqueSizes.length}sizes.zip`
+    }
+    return `banner_crop_${outputs.length}files.zip`
+  }
+
   const prefix = uniqueSources.length === 1
     ? sanitizeName(uniqueSources[0])
     : `banner_batch_${uniqueSources.length}src`
@@ -182,6 +191,8 @@ function getFocalRatio(point: FocalPoint) {
   return 0.5
 }
 
+export type BannerOutputLayout = 'bySource' | 'flat'
+
 export function getUniquePath(path: string, usedPaths: Set<string>) {
   if (!usedPaths.has(path)) {
     usedPaths.add(path)
@@ -202,6 +213,23 @@ export function getUniquePath(path: string, usedPaths: Set<string>) {
   }
   usedPaths.add(nextPath)
   return nextPath
+}
+
+/** 平铺命名：640x360.jpg，冲突时为 750x300-2.jpg（对齐素材包习惯） */
+export function getUniqueFlatPath(sizeLabel: string, outputExt: string, usedPaths: Set<string>, folder = '') {
+  const prefix = folder ? `${folder}/` : ''
+  let path = `${prefix}${sizeLabel}.${outputExt}`
+  if (!usedPaths.has(path)) {
+    usedPaths.add(path)
+    return path
+  }
+  let index = 2
+  while (usedPaths.has(`${prefix}${sizeLabel}-${index}.${outputExt}`)) {
+    index += 1
+  }
+  path = `${prefix}${sizeLabel}-${index}.${outputExt}`
+  usedPaths.add(path)
+  return path
 }
 
 export function findBestMasterGroup(source: BannerSource) {
@@ -311,14 +339,25 @@ export interface GenerateBannerOutputsResult {
   failed: number
 }
 
+export interface GenerateBannerOutputsOptions {
+  /** flat：全部放入同一目录，文件名为 宽x高.ext（参考批量素材包） */
+  layout?: BannerOutputLayout
+  /** flat 时是否放入格式子目录，如 jpg/152x103.jpg */
+  useFormatFolder?: boolean
+}
+
 export async function generateBannerOutputs(
   plans: BannerGenerationPlan[],
   settings: BannerCropSettings,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  options: GenerateBannerOutputsOptions = {}
 ): Promise<GenerateBannerOutputsResult> {
+  const layout = options.layout ?? 'bySource'
+  const useFormatFolder = options.useFormatFolder ?? layout === 'flat'
   const nextOutputs: BannerOutput[] = []
   const usedPaths = new Set<string>()
   const outputExt = getExtension(settings.outputFormat)
+  const formatFolder = useFormatFolder ? outputExt : ''
   let done = 0
   let failed = 0
   const total = plans.reduce((sum, plan) => sum + plan.sizes.length, 0)
@@ -331,11 +370,16 @@ export async function generateBannerOutputs(
       try {
         const blob = await drawBannerCrop(source, size, settings)
         const sizeGroup = findMasterGroupForTargetSize(size.width, size.height)
-        const fileName = `${sizeGroup.code}_${size.label}.${outputExt}`
-        const rawPath = plans.length > 1 || sizes.length > 1
-          ? `${sourceFolder}/${fileName}`
-          : fileName
-        const path = getUniquePath(rawPath, usedPaths)
+        let path: string
+        if (layout === 'flat') {
+          path = getUniqueFlatPath(size.label, outputExt, usedPaths, formatFolder)
+        } else {
+          const fileName = `${sizeGroup.code}_${size.label}.${outputExt}`
+          const rawPath = plans.length > 1 || sizes.length > 1
+            ? `${sourceFolder}/${fileName}`
+            : fileName
+          path = getUniquePath(rawPath, usedPaths)
+        }
         const url = URL.createObjectURL(blob)
 
         if (blob.size === 0) throw new Error('输出文件为空')
@@ -345,7 +389,7 @@ export async function generateBannerOutputs(
           sourceId: source.id,
           sourceBaseName: sanitizeName(source.baseName),
           masterGroup: sizeGroup.label,
-          name: path.split('/').pop() || fileName,
+          name: path.split('/').pop() || `${size.label}.${outputExt}`,
           path,
           width: size.width,
           height: size.height,

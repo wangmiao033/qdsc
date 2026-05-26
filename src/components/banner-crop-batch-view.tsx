@@ -307,7 +307,8 @@ export default function BannerCropBatchView() {
     const { outputs: nextOutputs, failed } = await generateBannerOutputs(
       plans,
       cropSettings,
-      setProgress
+      setProgress,
+      { layout: 'flat', useFormatFolder: true }
     )
 
     setOutputs(nextOutputs)
@@ -333,7 +334,7 @@ export default function BannerCropBatchView() {
       const zip = new JSZip()
       outputs.forEach(output => zip.file(output.path, output.blob))
       const blob = await zip.generateAsync({ type: 'blob' })
-      saveAs(blob, buildBannerZipFileName(outputs))
+      saveAs(blob, buildBannerZipFileName(outputs, { flatPack: true }))
     } finally {
       setIsZipping(false)
     }
@@ -643,7 +644,7 @@ export default function BannerCropBatchView() {
                   {isZipping ? (
                     <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />打包中...</>
                   ) : (
-                    <><FileArchive className="h-3.5 w-3.5 mr-1.5" />下载 ZIP · {outputs.length} 个（{formatBytes(totalOutputSize)}）</>
+                    <><FileArchive className="h-3.5 w-3.5 mr-1.5" />下载素材包 ZIP · {outputs.length} 张</>
                   )}
                 </Button>
               )}
@@ -847,7 +848,7 @@ export default function BannerCropBatchView() {
                   <div>
                     <CardTitle className="text-sm font-medium">生成结果</CardTitle>
                     <CardDescription className="text-xs">
-                      {outputs.length} 个文件 · {formatBytes(totalOutputSize)} · 按原图分子目录
+                      {outputs.length} 个文件 · {formatBytes(totalOutputSize)} · ZIP 内平铺于 jpg/（文件名 宽×高.jpg）
                     </CardDescription>
                   </div>
                   <Button
