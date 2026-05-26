@@ -391,9 +391,28 @@ export default function BannerCropView() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const dragCounterRef = useRef(0)
   const sourcesRef = useRef<BannerSource[]>([])
   const outputsRef = useRef<BannerOutput[]>([])
   const { toast } = useToast()
+
+  const resetFileInput = () => {
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const getFilesFromDataTransfer = (dataTransfer: DataTransfer) => {
+    if (dataTransfer.files?.length > 0) {
+      return Array.from(dataTransfer.files)
+    }
+    const files: File[] = []
+    for (const item of Array.from(dataTransfer.items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) files.push(file)
+      }
+    }
+    return files
+  }
 
   const allSizes = useMemo(() => {
     const map = new Map<string, BannerSize>()
@@ -548,13 +567,16 @@ export default function BannerCropView() {
     setProgress(0)
   }
 
-  const addFiles = async (fileList: FileList | File[]) => {
+  const addFiles = async (fileList: FileList | File[] | null | undefined) => {
+    if (!fileList || fileList.length === 0) return
+
     const imageFiles = Array.from(fileList).filter(file =>
       file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)
     )
 
     if (imageFiles.length === 0) {
       toast({ title: '请选择图片文件', description: '支持 PNG/JPG/WebP/GIF/BMP', variant: 'destructive' })
+      resetFileInput()
       return
     }
 
@@ -563,30 +585,32 @@ export default function BannerCropView() {
     const nextSources: BannerSource[] = []
     const skipped: Array<{ name: string; reason: string }> = []
 
-    for (const file of imageFiles) {
-      try {
-        nextSources.push(await readSource(file))
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : '图片读取失败'
-        skipped.push({ name: file.name, reason })
-        console.warn('[BannerCrop] skipped source image', { fileName: file.name, reason })
+    try {
+      for (const file of imageFiles) {
+        try {
+          nextSources.push(await readSource(file))
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : '图片读取失败'
+          skipped.push({ name: file.name, reason })
+          console.warn('[BannerCrop] skipped source image', { fileName: file.name, reason })
+        }
       }
-    }
 
-    setSources(prev => [...prev, ...nextSources])
-    if (nextSources.length > 0) {
-      const matchedGroup = findBestMasterGroup(nextSources[0])
-      setOutputScope('autoMaster')
-      setActiveMasterGroupId(matchedGroup.id)
-      setSelectedSizes(new Set(matchedGroup.sizes))
-    }
-    setIsReading(false)
-
-    if (nextSources.length > 0) {
-      toast({ title: `已添加 ${nextSources.length} 张 Banner 原图` })
-    }
-    if (skipped.length > 0) {
-      toast({ title: `跳过 ${skipped.length} 个文件`, description: skipped[0].reason, variant: 'destructive' })
+      if (nextSources.length > 0) {
+        setSources(prev => [...prev, ...nextSources])
+        const latest = nextSources[nextSources.length - 1]
+        const matchedGroup = findBestMasterGroup(latest)
+        setOutputScope('autoMaster')
+        setActiveMasterGroupId(matchedGroup.id)
+        setSelectedSizes(new Set(matchedGroup.sizes))
+        toast({ title: `已添加 ${nextSources.length} 张 Banner 原图` })
+      }
+      if (skipped.length > 0) {
+        toast({ title: `跳过 ${skipped.length} 个文件`, description: skipped[0].reason, variant: 'destructive' })
+      }
+    } finally {
+      setIsReading(false)
+      resetFileInput()
     }
   }
 
@@ -608,7 +632,7 @@ export default function BannerCropView() {
     setActiveMasterGroupId(MASTER_GROUPS[0].id)
     setSelectedSizes(new Set(MASTER_GROUPS[0].sizes))
     setProgress(0)
-    if (inputRef.current) inputRef.current.value = ''
+    resetFileInput()
   }
 
   const toggleSize = (key: string) => {
@@ -838,13 +862,42 @@ export default function BannerCropView() {
     saveAs(blob, buildBannerZipFileName(outputs))
   }
 
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    dragCounterRef.current += 1
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    dragCounterRef.current = 0
     setIsDragging(false)
-    if (event.dataTransfer.files.length > 0) {
-      addFiles(event.dataTransfer.files)
+    const files = getFilesFromDataTransfer(event.dataTransfer)
+    if (files.length > 0) {
+      void addFiles(files)
+    } else {
+      toast({ title: '未识别到图片', description: '请拖入 PNG/JPG/WebP/GIF/BMP 文件', variant: 'destructive' })
     }
+  }
+
+  const openFilePicker = () => {
+    resetFileInput()
+    inputRef.current?.click()
   }
 
   const downloadBtnClass = 'h-8 rounded-lg text-xs shrink-0'
@@ -883,54 +936,73 @@ export default function BannerCropView() {
             <CardContent className="px-4 pb-4 space-y-3">
               <div
                 className={cn(
-                  'relative border border-dashed rounded-xl p-4 text-center cursor-pointer transition-all',
+                  'relative border border-dashed rounded-xl p-4 text-center transition-all',
                   isDragging
                     ? 'border-foreground bg-muted/50'
-                    : 'border-border hover:border-foreground/40 hover:bg-muted/30'
+                    : 'border-border hover:border-foreground/40 hover:bg-muted/30',
+                  isReading ? 'pointer-events-none opacity-70' : 'cursor-pointer'
                 )}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setIsDragging(true)
+                onClick={openFilePicker}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    openFilePicker()
+                  }
                 }}
-                onDragLeave={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setIsDragging(false)
-                }}
-                onClick={() => inputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                aria-label="上传 Banner 原图，支持点击或拖入"
               >
                 <input
                   ref={inputRef}
                   type="file"
                   multiple
                   accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
-                  className="hidden"
-                  onChange={(event) => {
-                    addFiles(event.target.files || [])
-                    event.target.value = ''
+                  className="sr-only"
+                  onChange={event => {
+                    void addFiles(event.target.files)
                   }}
                 />
-                {isReading ? (
-                  <>
-                    <Loader2 className="h-7 w-7 mx-auto text-foreground animate-spin" />
-                    <div className="text-sm font-medium mt-2">读取中...</div>
-                  </>
-                ) : sources.length > 0 ? (
-                  <>
-                    <ImagePlus className="h-7 w-7 mx-auto text-foreground/70" />
-                    <div className="text-sm font-medium mt-2">已选择 {sources.length} 张原图</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">点击或拖入继续添加</div>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-7 w-7 mx-auto text-muted-foreground" />
-                    <div className="text-sm font-medium mt-2">拖入 Banner 原图或点击选择</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP</div>
-                  </>
-                )}
+                <div className="pointer-events-none">
+                  {isReading ? (
+                    <>
+                      <Loader2 className="h-7 w-7 mx-auto text-foreground animate-spin" />
+                      <div className="text-sm font-medium mt-2">读取中...</div>
+                    </>
+                  ) : sources.length > 0 ? (
+                    <>
+                      <ImagePlus className="h-7 w-7 mx-auto text-foreground/70" />
+                      <div className="text-sm font-medium mt-2">已选择 {sources.length} 张原图</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">点击或拖入继续添加</div>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-7 w-7 mx-auto text-muted-foreground" />
+                      <div className="text-sm font-medium mt-2">拖入 Banner 原图或点击选择</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP · 支持多选</div>
+                    </>
+                  )}
+                </div>
               </div>
+              {sources.length > 0 && !isReading && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-8 text-xs rounded-lg border-border/80"
+                  onClick={event => {
+                    event.stopPropagation()
+                    openFilePicker()
+                  }}
+                >
+                  <ImagePlus className="h-3.5 w-3.5 mr-1" />
+                  继续添加原图
+                </Button>
+              )}
 
               {sources.length > 0 && (
                 <div className="flex items-stretch divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
