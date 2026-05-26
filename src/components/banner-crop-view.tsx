@@ -686,6 +686,12 @@ export default function BannerCropView() {
     setSelectedSizes(new Set(group.sizes))
     setSizeFilter('all')
     setSizeSearch('')
+    if (uploadedGroup && uploadedGroup.id !== group.id) {
+      toast({
+        title: '当前原图不匹配此分类',
+        description: `已上传原图属于「${uploadedGroup.label}」，此分类仅可预览尺寸`,
+      })
+    }
   }
 
   const enableAutoMasterMode = () => {
@@ -907,7 +913,9 @@ export default function BannerCropView() {
             <Crop className="h-5 w-5 text-foreground" />
             Banner 裁剪
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">每次上传 1 张母版原图，自动匹配分类后批量裁切</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            每次 1 张母版原图，自动匹配后裁切；多张母版请用侧栏「Banner 裁剪（批量）」
+          </p>
         </div>
         <Button
           variant="outline"
