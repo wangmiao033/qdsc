@@ -18,9 +18,10 @@ import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 
 type OutputFormat = 'jpg' | 'png' | 'webp'
-type CropMode = 'cover' | 'contain' | 'stretch'
+type CropMode = 'cover' | 'contain'
 type FocalPoint = 'center' | 'top' | 'bottom' | 'left' | 'right'
 type SizeFilter = 'all' | 'landscape' | 'portrait' | 'square'
+type OutputScope = 'autoMaster' | 'manual'
 
 interface BannerSource {
   id: string
@@ -40,10 +41,19 @@ interface BannerSize {
   label: string
 }
 
+interface MasterGroup {
+  id: string
+  label: string
+  master: string
+  description: string
+  sizes: string[]
+}
+
 interface BannerOutput {
   id: string
   sourceId: string
   sourceBaseName: string
+  masterGroup: string
   name: string
   path: string
   width: number
@@ -88,7 +98,55 @@ const RAW_BANNER_SIZE_PRESETS = [
   '2000x1000', '2200x800', '2400x1000',
 ]
 
-const BANNER_SIZE_PRESETS: BannerSize[] = Array.from(new Set(RAW_BANNER_SIZE_PRESETS))
+const MASTER_GROUPS: MasterGroup[] = [
+  {
+    id: 'wide-16-9',
+    label: '1920x1080 横版主图母版',
+    master: '1920x1080',
+    description: '16:9 横版，适合主视觉横图',
+    sizes: ['640x360', '800x450', '960x540', '1024x576', '1080x608', '1280x720', '1920x1080'],
+  },
+  {
+    id: 'long-banner',
+    label: '1920x640 长条横幅母版',
+    master: '1920x640',
+    description: '长条横幅，适合顶部 Banner 和推广条',
+    sizes: ['750x250', '900x300', '970x340', '1000x300', '1008x372', '1200x400', '1920x452', '1920x500', '1920x600', '1920x640'],
+  },
+  {
+    id: 'portrait-9-16',
+    label: '1080x1920 手机竖版母版',
+    master: '1080x1920',
+    description: '9:16 竖版，适合开屏和竖版投放',
+    sizes: ['720x1280', '750x1334', '750x1350', '880x1200', '900x1200', '1080x1560', '1080x1920', '1080x2160', '1080x2400'],
+  },
+  {
+    id: 'square',
+    label: '1024x1024 方图母版',
+    master: '1024x1024',
+    description: '1:1 方图，适合图标式方形广告位',
+    sizes: ['450x450', '640x640', '750x750', '800x800', '984x984', '1024x1024', '1080x1080'],
+  },
+  {
+    id: 'wide-2-1',
+    label: '2000x1000 2:1 宽横版母版',
+    master: '2000x1000',
+    description: '宽横版封面，介于 16:9 和长条之间',
+    sizes: ['500x250', '600x300', '700x360', '720x350', '900x450', '1000x500', '2000x1000', '2400x1000'],
+  },
+  {
+    id: 'portrait-medium',
+    label: '1080x1440 中竖版母版',
+    master: '1080x1440',
+    description: '中竖版，适合 3:4 附近素材',
+    sizes: ['720x890', '750x920', '750x1252', '834x1236', '880x1200', '900x1200', '1080x1440', '1080x1560'],
+  },
+]
+
+const BANNER_SIZE_PRESETS: BannerSize[] = Array.from(new Set([
+  ...RAW_BANNER_SIZE_PRESETS,
+  ...MASTER_GROUPS.flatMap(group => [group.master, ...group.sizes]),
+]))
   .map(label => {
     const [width, height] = label.split('x').map(Number)
     return { key: label, width, height, label }
@@ -141,6 +199,29 @@ function getFocalRatio(point: FocalPoint) {
   if (point === 'top' || point === 'left') return 0
   if (point === 'bottom' || point === 'right') return 1
   return 0.5
+}
+
+function parseSize(label: string) {
+  const [width, height] = label.split('x').map(Number)
+  return { width, height }
+}
+
+function getMasterRatio(group: MasterGroup) {
+  const master = parseSize(group.master)
+  return master.width / master.height
+}
+
+function findBestMasterGroup(source: BannerSource) {
+  const sourceKey = `${source.width}x${source.height}`
+  const exactMatch = MASTER_GROUPS.find(group => group.master === sourceKey)
+  if (exactMatch) return exactMatch
+
+  const sourceRatio = source.width / source.height
+  return MASTER_GROUPS.reduce((best, group) => {
+    const bestDiff = Math.abs(sourceRatio - getMasterRatio(best))
+    const groupDiff = Math.abs(sourceRatio - getMasterRatio(group))
+    return groupDiff < bestDiff ? group : best
+  }, MASTER_GROUPS[0])
 }
 
 function getUniquePath(path: string, usedPaths: Set<string>) {
@@ -203,7 +284,9 @@ async function readSource(file: File): Promise<BannerSource> {
 export default function BannerCropView() {
   const [sources, setSources] = useState<BannerSource[]>([])
   const [outputs, setOutputs] = useState<BannerOutput[]>([])
-  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(() => new Set(BANNER_SIZE_PRESETS.map(size => size.key)))
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(() => new Set(MASTER_GROUPS[0].sizes))
+  const [outputScope, setOutputScope] = useState<OutputScope>('autoMaster')
+  const [activeMasterGroupId, setActiveMasterGroupId] = useState(MASTER_GROUPS[0].id)
   const [sizeFilter, setSizeFilter] = useState<SizeFilter>('all')
   const [sizeSearch, setSizeSearch] = useState('')
   const [customSize, setCustomSize] = useState('')
@@ -242,10 +325,24 @@ export default function BannerCropView() {
     [allSizes, selectedSizes]
   )
 
-  const selectedLandscapeCount = selectedSizeList.filter(size => size.width > size.height).length
-  const selectedPortraitCount = selectedSizeList.filter(size => size.width < size.height).length
-  const selectedSquareCount = selectedSizeList.filter(size => size.width === size.height).length
-  const totalOutputCount = sources.length * selectedSizeList.length
+  const sizeByKey = useMemo(() => new Map(allSizes.map(size => [size.key, size])), [allSizes])
+  const getGroupSizes = (group: MasterGroup) => group.sizes
+    .map(key => sizeByKey.get(key))
+    .filter((size): size is BannerSize => Boolean(size))
+
+  const sourcePlans = useMemo(() => sources.map(source => {
+    const group = findBestMasterGroup(source)
+    return { source, group, sizes: getGroupSizes(group) }
+  }), [sources, sizeByKey])
+
+  const activeMasterGroup = MASTER_GROUPS.find(group => group.id === activeMasterGroupId) || MASTER_GROUPS[0]
+  const activeMasterGroupSizes = getGroupSizes(activeMasterGroup)
+  const activeSizeList = outputScope === 'autoMaster' ? activeMasterGroupSizes : selectedSizeList
+  const sourcePlanById = useMemo(() => new Map(sourcePlans.map(plan => [plan.source.id, plan])), [sourcePlans])
+  const selectedLandscapeCount = activeSizeList.filter(size => size.width > size.height).length
+  const selectedPortraitCount = activeSizeList.filter(size => size.width < size.height).length
+  const selectedSquareCount = activeSizeList.filter(size => size.width === size.height).length
+  const totalOutputCount = sources.length * activeSizeList.length
   const totalSourceSize = sources.reduce((sum, source) => sum + source.size, 0)
   const totalOutputSize = outputs.reduce((sum, output) => sum + output.blob.size, 0)
 
@@ -257,6 +354,13 @@ export default function BannerCropView() {
       outputsRef.current.forEach(output => URL.revokeObjectURL(output.url))
     }
   }, [])
+
+  useEffect(() => {
+    if (outputScope !== 'autoMaster' || sources.length === 0) return
+    const matchedGroup = findBestMasterGroup(sources[0])
+    setActiveMasterGroupId(prev => prev === matchedGroup.id ? prev : matchedGroup.id)
+    setSelectedSizes(new Set(matchedGroup.sizes))
+  }, [sources, outputScope])
 
   const clearOutputs = () => {
     outputs.forEach(output => URL.revokeObjectURL(output.url))
@@ -290,6 +394,12 @@ export default function BannerCropView() {
     }
 
     setSources(prev => [...prev, ...nextSources])
+    if (nextSources.length > 0) {
+      const matchedGroup = findBestMasterGroup(nextSources[0])
+      setOutputScope('autoMaster')
+      setActiveMasterGroupId(matchedGroup.id)
+      setSelectedSizes(new Set(matchedGroup.sizes))
+    }
     setIsReading(false)
 
     if (nextSources.length > 0) {
@@ -314,12 +424,16 @@ export default function BannerCropView() {
     outputs.forEach(output => URL.revokeObjectURL(output.url))
     setSources([])
     setOutputs([])
+    setOutputScope('autoMaster')
+    setActiveMasterGroupId(MASTER_GROUPS[0].id)
+    setSelectedSizes(new Set(MASTER_GROUPS[0].sizes))
     setProgress(0)
     if (inputRef.current) inputRef.current.value = ''
   }
 
   const toggleSize = (key: string) => {
     clearOutputs()
+    setOutputScope('manual')
     setSelectedSizes(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -330,6 +444,7 @@ export default function BannerCropView() {
 
   const selectFilteredSizes = () => {
     clearOutputs()
+    setOutputScope('manual')
     setSelectedSizes(prev => {
       const next = new Set(prev)
       filteredSizes.forEach(size => next.add(size.key))
@@ -339,6 +454,7 @@ export default function BannerCropView() {
 
   const clearFilteredSizes = () => {
     clearOutputs()
+    setOutputScope('manual')
     setSelectedSizes(prev => {
       const next = new Set(prev)
       filteredSizes.forEach(size => next.delete(size.key))
@@ -357,8 +473,28 @@ export default function BannerCropView() {
     const key = `${width}x${height}`
     const newSize = { key, width, height, label: key }
     setExtraSizes(prev => prev.some(size => size.key === key) ? prev : [...prev, newSize])
+    setOutputScope('manual')
     setSelectedSizes(prev => new Set(prev).add(key))
     setCustomSize('')
+  }
+
+  const selectMasterGroup = (group: MasterGroup) => {
+    clearOutputs()
+    setOutputScope('manual')
+    setActiveMasterGroupId(group.id)
+    setSelectedSizes(new Set(group.sizes))
+    setSizeFilter('all')
+    setSizeSearch('')
+  }
+
+  const enableAutoMasterMode = () => {
+    clearOutputs()
+    setOutputScope('autoMaster')
+    if (sources.length > 0) {
+      const matchedGroup = findBestMasterGroup(sources[0])
+      setActiveMasterGroupId(matchedGroup.id)
+      setSelectedSizes(new Set(matchedGroup.sizes))
+    }
   }
 
   const drawBanner = async (source: BannerSource, target: BannerSize) => {
@@ -374,9 +510,7 @@ export default function BannerCropView() {
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
 
-    if (cropMode === 'stretch') {
-      ctx.drawImage(image, 0, 0, target.width, target.height)
-    } else if (cropMode === 'contain') {
+    if (cropMode === 'contain') {
       const scale = Math.min(target.width / source.width, target.height / source.height)
       const drawWidth = source.width * scale
       const drawHeight = source.height * scale
@@ -406,7 +540,7 @@ export default function BannerCropView() {
   }
 
   const handleGenerate = async () => {
-    if (sources.length === 0 || selectedSizeList.length === 0 || isGenerating) return
+    if (sources.length === 0 || totalOutputCount === 0 || isGenerating) return
 
     clearOutputs()
     setIsGenerating(true)
@@ -415,17 +549,31 @@ export default function BannerCropView() {
     const nextOutputs: BannerOutput[] = []
     const usedPaths = new Set<string>()
     const outputExt = getExtension(outputFormat)
-    const total = sources.length * selectedSizeList.length
+    const total = totalOutputCount
     let done = 0
 
-    for (const source of sources) {
-      for (const size of selectedSizeList) {
+    const groupSizes = getGroupSizes(activeMasterGroup)
+    const isExactGroupSelection = selectedSizeList.length === groupSizes.length
+      && groupSizes.every(size => selectedSizes.has(size.key))
+    const outputGroup = outputScope === 'autoMaster' || isExactGroupSelection
+      ? activeMasterGroup
+      : { id: 'manual', label: '手动尺寸', master: 'manual', description: '', sizes: activeSizeList.map(size => size.key) }
+    const plans = sources.map(source => ({
+      source,
+      group: outputGroup,
+      sizes: activeSizeList,
+    }))
+
+    for (const plan of plans) {
+      const { source, group, sizes } = plan
+      for (const size of sizes) {
         try {
           const blob = await drawBanner(source, size)
           const safeBaseName = sanitizeName(source.baseName)
           const fileName = `${safeBaseName}_${size.label}.${outputExt}`
-          const rawPath = sources.length > 1
-            ? `${safeBaseName}/${fileName}`
+          const groupFolder = sanitizeName(group.label)
+          const rawPath = sources.length > 1 || outputScope === 'autoMaster'
+            ? `${groupFolder}/${safeBaseName}/${fileName}`
             : fileName
           const path = getUniquePath(rawPath, usedPaths)
           const url = URL.createObjectURL(blob)
@@ -433,6 +581,7 @@ export default function BannerCropView() {
             id: `${source.id}-${size.key}`,
             sourceId: source.id,
             sourceBaseName: safeBaseName,
+            masterGroup: group.label,
             name: path.split('/').pop() || fileName,
             path,
             width: size.width,
@@ -557,8 +706,8 @@ export default function BannerCropView() {
                     <div className="text-[10px] text-muted-foreground">原图</div>
                   </Card>
                   <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">{selectedSizeList.length}</div>
-                    <div className="text-[10px] text-muted-foreground">尺寸</div>
+                    <div className="text-lg font-bold">{activeSizeList.length}</div>
+                    <div className="text-[10px] text-muted-foreground">{outputScope === 'autoMaster' ? '分类尺寸' : '手选尺寸'}</div>
                   </Card>
                   <Card className="p-2.5 text-center">
                     <div className="text-lg font-bold">{totalOutputCount}</div>
@@ -586,7 +735,6 @@ export default function BannerCropView() {
                   <SelectContent>
                     <SelectItem value="cover">等比填充裁剪</SelectItem>
                     <SelectItem value="contain">等比完整留边</SelectItem>
-                    <SelectItem value="stretch">拉伸铺满</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -645,7 +793,7 @@ export default function BannerCropView() {
               <Button
                 className="w-full"
                 onClick={handleGenerate}
-                disabled={sources.length === 0 || selectedSizeList.length === 0 || isGenerating || isReading}
+                disabled={sources.length === 0 || totalOutputCount === 0 || isGenerating || isReading}
               >
                 {isGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Crop className="h-4 w-4 mr-1" />}
                 {isGenerating ? '生成中...' : `生成 Banner (${totalOutputCount} 个文件)`}
@@ -661,11 +809,80 @@ export default function BannerCropView() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-sm flex items-center gap-2">
+                    <FileArchive className="h-4 w-4" />
+                    母版分类
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    当前母版：{activeMasterGroup.label}。默认按上传图片比例自动匹配，只输出该母版可覆盖的尺寸。
+                  </CardDescription>
+                </div>
+                <Button
+                  variant={outputScope === 'autoMaster' ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={enableAutoMasterMode}
+                >
+                  自动匹配
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                {MASTER_GROUPS.map(group => {
+                  const groupSizes = getGroupSizes(group)
+                  const ratio = getMasterRatio(group)
+                  const isActiveGroup = activeMasterGroupId === group.id
+                  const isManualGroupSelected = outputScope === 'manual'
+                    && groupSizes.length > 0
+                    && groupSizes.every(size => selectedSizes.has(size.key))
+                    && selectedSizeList.length === groupSizes.length
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => selectMasterGroup(group)}
+                      className={`text-left rounded-md border p-3 transition-colors ${
+                        isActiveGroup || isManualGroupSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{group.label}</div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">{group.description}</div>
+                        </div>
+                        <Badge variant={isActiveGroup ? 'default' : 'secondary'} className="font-mono text-[10px] px-1.5 shrink-0">{group.master}</Badge>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>{groupSizes.length} 个尺寸</span>
+                        <span className="font-mono">{ratio.toFixed(2)}:1</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {groupSizes.slice(0, 6).map(size => (
+                          <Badge key={size.key} variant="outline" className="font-mono text-[10px] px-1.5">
+                            {size.label}
+                          </Badge>
+                        ))}
+                        {groupSizes.length > 6 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5">+{groupSizes.length - 6}</Badge>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
                     <Crop className="h-4 w-4" />
                     尺寸预设
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    {allSizes.length} 个唯一尺寸 · 已选 {selectedSizeList.length} 个
+                    {allSizes.length} 个唯一尺寸 · {outputScope === 'autoMaster' ? `当前分类覆盖 ${activeSizeList.length} 个` : `手动已选 ${selectedSizeList.length} 个`}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -731,7 +948,9 @@ export default function BannerCropView() {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-80 overflow-y-auto pr-1">
                 {filteredSizes.map(size => {
-                  const checked = selectedSizes.has(size.key)
+                  const checked = outputScope === 'autoMaster'
+                    ? activeSizeList.some(activeSize => activeSize.key === size.key)
+                    : selectedSizes.has(size.key)
                   return (
                     <button
                       key={size.key}
@@ -790,6 +1009,11 @@ export default function BannerCropView() {
                         <div className="text-xs font-medium truncate" title={source.name}>{source.name}</div>
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           <Badge variant="secondary" className="font-mono text-[10px] px-1.5">{source.width}x{source.height}</Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5">
+                            {outputScope === 'autoMaster'
+                              ? sourcePlanById.get(source.id)?.group.label || activeMasterGroup.label
+                              : activeMasterGroup.label}
+                          </Badge>
                           <span>{formatBytes(source.size)}</span>
                         </div>
                       </div>
