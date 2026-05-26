@@ -768,6 +768,7 @@ export default function WorkflowApp() {
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
             onNavigateToIconCrop={() => setActiveTab('iconCrop')}
+            onNavigateToBannerCrop={() => setActiveTab('bannerCrop')}
           />
         )}
         {activeTab === 'sizeWorkflow' && (

@@ -27,6 +27,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
+import { resolveCropTool } from '@/lib/crop-utils'
 
 // ========== Types ==========
 interface ChannelData {
@@ -169,11 +170,13 @@ function resolveDbChannels(main: string, aliases: string[], dbChannels: string[]
 export default function ProductionBoardView({
   onBatchChange,
   onRefresh,
-  onNavigateToIconCrop
+  onNavigateToIconCrop,
+  onNavigateToBannerCrop,
 }: {
   onBatchChange: (id: string) => void
   onRefresh: () => void
   onNavigateToIconCrop?: () => void
+  onNavigateToBannerCrop?: () => void
 }) {
   const [step, setStep] = useState(1) // 1=渠道准备, 2=快速建任务, 3=制作看板, 4=交付总览
   const [boardData, setBoardData] = useState<BoardData | null>(null)
@@ -1230,20 +1233,26 @@ export default function ProductionBoardView({
                                   size="sm"
                                   className="text-[10px] h-6 px-2 text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-950/30"
                                   onClick={() => {
-                                    // Store crop sizes to localStorage for IconCrop to pick up
-                                    const existingSizes = JSON.parse(localStorage.getItem('qdsc_crop_sizes') || '[]')
+                                    const specNames = group.tasks.map(task => task.specName)
+                                    const cropTool = resolveCropTool(specNames, group.width, group.height)
+                                    const storageKey = cropTool === 'banner' ? 'qdsc_banner_crop_sizes' : 'qdsc_crop_sizes'
+                                    const toolLabel = cropTool === 'banner' ? 'Banner 裁剪' : 'Icon 裁剪'
+
+                                    const existingSizes = JSON.parse(localStorage.getItem(storageKey) || '[]')
                                     const newSize = { width: group.width, height: group.height, format: group.format }
-                                    const merged = [...existingSizes.filter((s: {width: number, height: number, format: string}) =>
-                                      !(s.width === newSize.width && s.height === newSize.height && s.format === newSize.format)
+                                    const merged = [...existingSizes.filter((size: { width: number; height: number; format: string }) =>
+                                      !(size.width === newSize.width && size.height === newSize.height && size.format === newSize.format)
                                     ), newSize]
-                                    localStorage.setItem('qdsc_crop_sizes', JSON.stringify(merged))
+                                    localStorage.setItem(storageKey, JSON.stringify(merged))
                                     navigator.clipboard.writeText(`${group.width}x${group.height} ${group.format}`)
                                     toast({
                                       title: '已复制并跳转',
-                                      description: `${group.width}x${group.height} ${group.format} 已复制到剪贴板，正在跳转到裁剪工具...`
+                                      description: `${group.width}x${group.height} ${group.format} 已复制，正在跳转到${toolLabel}...`,
                                     })
-                                    if (onNavigateToIconCrop) {
-                                      onNavigateToIconCrop()
+                                    if (cropTool === 'banner') {
+                                      onNavigateToBannerCrop?.()
+                                    } else {
+                                      onNavigateToIconCrop?.()
                                     }
                                   }}
                                 >
