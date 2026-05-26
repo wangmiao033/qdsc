@@ -2,3 +2,4 @@ qdsc/
 node_modules/
 .next/
 import-specs.js
+tsconfig.tsbuildinfo

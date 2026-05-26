@@ -1,0 +1,17 @@
+---
+description: After completing code changes in this repo, commit and push when the user asks to save, deploy, or 推送.
+alwaysApply: true
+---
+
+# 自动提交与推送（qdsc）
+
+当用户在本项目中要求「提交」「推送」「更新并部署」「保存改动」或类似表述时：
+
+1. 先 `git status` / `git diff` 确认变更范围。
+2. 只提交与任务相关的文件，不要提交 `tsconfig.tsbuildinfo`、`.env` 等本地/敏感文件。
+3. 写好简洁的 commit message 后执行 `git commit`。
+4. 随后执行 `git push origin <当前分支>`（Windows 下若遇 safe.directory 问题，使用 `git -c safe.directory=H:/qdsc/qdsc`）。
+
+本地已配置 **post-commit** 钩子：每次 `git commit` 成功后会自动 `git push`。若推送失败，在回复中说明原因并提示用户手动推送。
+
+用户未明确要求时，不要擅自提交或推送。

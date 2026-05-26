@@ -6,6 +6,7 @@ import {
   Search, Settings2, Upload, X
 } from 'lucide-react'
 import { parseStoredOutputFormat } from '@/lib/crop-utils'
+import { cn } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { Button } from '@/components/ui/button'
@@ -425,7 +426,7 @@ function BannerSpecImportButton({ onImport }: { onImport: (sizes: BannerSize[]) 
 
   if (!open) {
     return (
-      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleOpen}>
+      <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-border/80" onClick={handleOpen}>
         <Database className="h-3.5 w-3.5 mr-1" />
         从规格库导入
       </Button>
@@ -433,7 +434,7 @@ function BannerSpecImportButton({ onImport }: { onImport: (sizes: BannerSize[]) 
   }
 
   return (
-    <Card className="p-3 space-y-2">
+    <Card className="rounded-xl border border-border/80 p-3 space-y-2 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">从规格库导入尺寸</span>
         <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={() => { setOpen(false); setSelectedChannel(''); setSpecs([]) }}>
@@ -975,36 +976,47 @@ export default function BannerCropView() {
     }
   }
 
+  const downloadBtnClass = 'h-8 rounded-lg text-xs shrink-0'
+
   return (
-    <div className="p-4 space-y-4 max-w-7xl">
-      <div className="flex items-center justify-between gap-3">
+    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 space-y-5 min-[1440px]:px-6">
+      <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-4">
         <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Crop className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+            <Crop className="h-5 w-5 text-foreground" />
             Banner 裁剪
           </h2>
-          <p className="text-xs text-muted-foreground">按渠道 Banner 尺寸批量裁切输出</p>
+          <p className="text-sm text-muted-foreground mt-0.5">按渠道 Banner 尺寸批量裁切输出</p>
         </div>
-        <Button variant="outline" size="sm" onClick={resetAll} disabled={sources.length === 0 && outputs.length === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-lg border-border/80"
+          onClick={resetAll}
+          disabled={sources.length === 0 && outputs.length === 0}
+        >
           <RefreshCw className="h-3.5 w-3.5 mr-1" />
           重置
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        <div className="xl:col-span-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Upload className="h-4 w-4" />
+      <div className="grid grid-cols-1 gap-5 min-[1440px]:grid-cols-[300px_minmax(0,1fr)] min-[1728px]:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-4 min-[1440px]:sticky min-[1440px]:top-4 min-[1440px]:self-start">
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Upload className="h-4 w-4 text-muted-foreground" />
                 上传原图
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="px-4 pb-4 space-y-3">
               <div
-                className={`relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
-                  isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/40 hover:bg-muted/20'
-                }`}
+                className={cn(
+                  'relative border border-dashed rounded-xl p-4 text-center cursor-pointer transition-all',
+                  isDragging
+                    ? 'border-foreground bg-muted/50'
+                    : 'border-border hover:border-foreground/40 hover:bg-muted/30'
+                )}
                 onDrop={handleDrop}
                 onDragOver={(event) => {
                   event.preventDefault()
@@ -1031,32 +1043,32 @@ export default function BannerCropView() {
                 />
                 {isReading ? (
                   <>
-                    <Loader2 className="h-9 w-9 mx-auto text-primary animate-spin" />
-                    <div className="text-sm font-medium mt-3">读取中...</div>
+                    <Loader2 className="h-7 w-7 mx-auto text-foreground animate-spin" />
+                    <div className="text-sm font-medium mt-2">读取中...</div>
                   </>
                 ) : sources.length > 0 ? (
                   <>
-                    <ImagePlus className="h-9 w-9 mx-auto text-emerald-500" />
-                    <div className="text-sm font-medium mt-3">已选择 {sources.length} 张原图</div>
-                    <div className="text-xs text-muted-foreground mt-1">点击或拖入继续添加</div>
+                    <ImagePlus className="h-7 w-7 mx-auto text-foreground/70" />
+                    <div className="text-sm font-medium mt-2">已选择 {sources.length} 张原图</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">点击或拖入继续添加</div>
                   </>
                 ) : (
                   <>
-                    <Upload className="h-9 w-9 mx-auto text-muted-foreground" />
-                    <div className="text-sm font-medium mt-3">拖入 Banner 原图或点击选择</div>
-                    <div className="text-xs text-muted-foreground mt-1">PNG / JPG / WebP / GIF / BMP</div>
+                    <Upload className="h-7 w-7 mx-auto text-muted-foreground" />
+                    <div className="text-sm font-medium mt-2">拖入 Banner 原图或点击选择</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP</div>
                   </>
                 )}
               </div>
 
               {sources.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
-                  <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">{sources.length}</div>
+                <div className="flex items-stretch divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
+                  <div className="flex-1 py-2 px-1">
+                    <div className="text-base font-semibold tabular-nums">{sources.length}</div>
                     <div className="text-[10px] text-muted-foreground">原图</div>
-                  </Card>
-                  <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">
+                  </div>
+                  <div className="flex-1 py-2 px-1">
+                    <div className="text-base font-semibold tabular-nums">
                       {outputScope === 'autoMaster' && sources.length > 1
                         ? new Set(sourcePlans.map(plan => plan.group.id)).size
                         : activeSizeList.length}
@@ -1066,28 +1078,28 @@ export default function BannerCropView() {
                         ? (sources.length > 1 ? '自动母版' : '分类尺寸')
                         : '手选尺寸'}
                     </div>
-                  </Card>
-                  <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">{totalOutputCount}</div>
+                  </div>
+                  <div className="flex-1 py-2 px-1">
+                    <div className="text-base font-semibold tabular-nums">{totalOutputCount}</div>
                     <div className="text-[10px] text-muted-foreground">预计输出</div>
-                  </Card>
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Settings2 className="h-4 w-4" />
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
                 裁剪设置
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">裁剪模式</Label>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">裁剪模式</Label>
                 <Select value={cropMode} onValueChange={(value) => setCropMode(value as CropMode)}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-8 rounded-lg text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1097,10 +1109,10 @@ export default function BannerCropView() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">裁剪焦点</Label>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">裁剪焦点</Label>
                 <Select value={focalPoint} onValueChange={(value) => setFocalPoint(value as FocalPoint)}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-8 rounded-lg text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1114,10 +1126,10 @@ export default function BannerCropView() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">输出格式</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">输出格式</Label>
                   <Select value={outputFormat} onValueChange={(value) => setOutputFormat(value as OutputFormat)}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger className="h-8 rounded-lg text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1127,11 +1139,11 @@ export default function BannerCropView() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">留边颜色</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">留边颜色</Label>
                   <Input
                     type="color"
-                    className="h-9 p-1"
+                    className="h-8 p-1 rounded-lg"
                     value={backgroundColor}
                     onChange={event => setBackgroundColor(event.target.value)}
                   />
@@ -1149,85 +1161,112 @@ export default function BannerCropView() {
               )}
 
               <Button
-                className="w-full"
+                className="w-full h-9 rounded-lg bg-foreground text-background hover:bg-foreground/90"
                 onClick={handleGenerate}
                 disabled={sources.length === 0 || totalOutputCount === 0 || isGenerating || isReading}
               >
                 {isGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Crop className="h-4 w-4 mr-1" />}
                 {isGenerating ? '生成中...' : `生成 Banner (${totalOutputCount} 个文件)`}
               </Button>
-              {isGenerating && <Progress value={progress} className="h-2" />}
+              {isGenerating && <Progress value={progress} className="h-1.5 rounded-full" />}
             </CardContent>
           </Card>
         </div>
 
-        <div className="xl:col-span-8 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <FileArchive className="h-4 w-4" />
+        <div className="space-y-4 min-w-0">
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <FileArchive className="h-4 w-4 text-muted-foreground" />
                     母版分类
+                    <span className="text-xs font-normal text-muted-foreground">共 {MASTER_GROUPS.length} 类</span>
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    当前母版：{activeMasterGroup.label}。默认按上传图片比例自动匹配，只输出该母版可覆盖的尺寸。
-                    {hasMixedMasterGroups && ' 多张原图比例不同时，将按各自匹配的母版分别输出。'}
+                  <CardDescription className="text-xs leading-relaxed">
+                    当前：<span className="font-medium text-foreground">{activeMasterGroup.label}</span>
+                    {hasMixedMasterGroups && ' · 多原图将按各自母版分别输出'}
                   </CardDescription>
                 </div>
                 <Button
-                  variant={outputScope === 'autoMaster' ? 'default' : 'outline'}
+                  variant="outline"
                   size="sm"
-                  className="h-8 text-xs"
+                  className={cn(
+                    'h-8 text-xs rounded-lg shrink-0',
+                    outputScope === 'autoMaster' && 'bg-foreground text-background border-foreground hover:bg-foreground/90 hover:text-background'
+                  )}
                   onClick={enableAutoMasterMode}
                 >
                   自动匹配
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+            <CardContent className="px-4 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-2 min-[1728px]:grid-cols-4 gap-3">
                 {MASTER_GROUPS.map(group => {
                   const groupSizes = getGroupSizes(group)
                   const ratio = getMasterRatio(group)
-                  const isActiveGroup = activeMasterGroupId === group.id
-                  const isManualGroupSelected = outputScope === 'manual'
-                    && groupSizes.length > 0
-                    && groupSizes.every(size => selectedSizes.has(size.key))
-                    && selectedSizeList.length === groupSizes.length
+                  const isSelected = activeMasterGroupId === group.id
+                    || (outputScope === 'manual'
+                      && groupSizes.length > 0
+                      && groupSizes.every(size => selectedSizes.has(size.key))
+                      && selectedSizeList.length === groupSizes.length)
                   return (
                     <button
                       key={group.id}
                       type="button"
                       onClick={() => selectMasterGroup(group)}
-                      className={`text-left rounded-md border p-3 transition-colors ${
-                        isActiveGroup || isManualGroupSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
-                      }`}
+                      title={group.masterFileName}
+                      className={cn(
+                        'text-left rounded-xl border p-3.5 transition-all',
+                        isSelected
+                          ? 'border-foreground bg-foreground text-background shadow-md'
+                          : 'border-border/80 bg-card hover:border-foreground/35 hover:shadow-sm'
+                      )}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{group.label}</div>
-                          <div className="text-[11px] text-muted-foreground mt-0.5">{group.description}</div>
-                          <div className="text-[10px] text-muted-foreground/80 mt-0.5 font-mono truncate" title={group.masterFileName}>
-                            母版文件：{group.masterFileName}
-                          </div>
-                        </div>
-                        <Badge variant={isActiveGroup ? 'default' : 'secondary'} className="font-mono text-[10px] px-1.5 shrink-0">
-                          {group.code} · {group.master}
-                        </Badge>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className={cn(
+                          'text-[10px] font-semibold tracking-wider uppercase',
+                          isSelected ? 'text-background/70' : 'text-muted-foreground'
+                        )}>
+                          母版 {group.code}
+                        </span>
+                        <span className="font-mono text-sm font-bold tabular-nums">{group.master}</span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                        <span>{groupSizes.length} 个尺寸</span>
-                        <span className="font-mono">{ratio.toFixed(2)}:1</span>
+                      <p className={cn(
+                        'text-xs leading-snug line-clamp-2',
+                        isSelected ? 'text-background/90' : 'text-foreground'
+                      )}>
+                        {group.description}
+                      </p>
+                      <div className={cn(
+                        'mt-2.5 flex items-center justify-between text-[10px]',
+                        isSelected ? 'text-background/75' : 'text-muted-foreground'
+                      )}>
+                        <span>比例 {ratio.toFixed(2)} : 1</span>
+                        <span>{groupSizes.length} 个覆盖尺寸</span>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {groupSizes.slice(0, 6).map(size => (
-                          <Badge key={size.key} variant="outline" className="font-mono text-[10px] px-1.5">
+                          <span
+                            key={size.key}
+                            className={cn(
+                              'inline-flex font-mono text-[10px] px-1.5 py-0.5 rounded border',
+                              isSelected
+                                ? 'border-background/30 bg-background/15'
+                                : 'border-border bg-muted/40 text-muted-foreground'
+                            )}
+                          >
                             {size.label}
-                          </Badge>
+                          </span>
                         ))}
                         {groupSizes.length > 6 && (
-                          <Badge variant="outline" className="text-[10px] px-1.5">+{groupSizes.length - 6}</Badge>
+                          <span className={cn(
+                            'inline-flex text-[10px] px-1.5 py-0.5 rounded border',
+                            isSelected ? 'border-background/30 bg-background/15' : 'border-border text-muted-foreground'
+                          )}>
+                            +{groupSizes.length - 6}
+                          </span>
                         )}
                       </div>
                     </button>
@@ -1237,50 +1276,44 @@ export default function BannerCropView() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Crop className="h-4 w-4" />
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Crop className="h-4 w-4 text-muted-foreground" />
                     尺寸预设
                   </CardTitle>
                   <CardDescription className="text-xs">
                     {outputScope === 'autoMaster'
                       ? `${scopeSizes.length} 个当前分类尺寸 · 预计输出 ${totalOutputCount} 个`
-                      : `${allSizes.length} 个唯一尺寸 · 手动已选 ${selectedSizeList.length} 个`}
+                      : `${allSizes.length} 个唯一尺寸 · 已选 ${selectedSizeList.length} 个`}
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <BannerSpecImportButton onImport={handleSpecImport} />
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={selectFilteredSizes}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-border/80" onClick={selectFilteredSizes}>
                     全选当前
                   </Button>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={clearFilteredSizes}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-border/80" onClick={clearFilteredSizes}>
                     取消当前
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{selectedLandscapeCount}</div>
-                  <div className="text-[10px] text-muted-foreground">横版</div>
-                </Card>
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{selectedPortraitCount}</div>
-                  <div className="text-[10px] text-muted-foreground">竖版</div>
-                </Card>
-                <Card className="p-2.5 text-center">
-                  <div className="text-lg font-bold">{selectedSquareCount}</div>
-                  <div className="text-[10px] text-muted-foreground">方图</div>
-                </Card>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">已选统计</span>
+                <span><span className="font-semibold tabular-nums text-foreground">{selectedLandscapeCount}</span> 横版</span>
+                <span className="text-border">|</span>
+                <span><span className="font-semibold tabular-nums text-foreground">{selectedPortraitCount}</span> 竖版</span>
+                <span className="text-border">|</span>
+                <span><span className="font-semibold tabular-nums text-foreground">{selectedSquareCount}</span> 方图</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-[160px_1fr_160px] gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_auto] gap-2 items-center">
                 <Select value={sizeFilter} onValueChange={(value) => setSizeFilter(value as SizeFilter)}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-8 rounded-lg text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1290,30 +1323,30 @@ export default function BannerCropView() {
                     <SelectItem value="square">只看方图</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="relative">
-                  <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <div className="relative min-w-0">
+                  <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    className="h-9 pl-8 text-xs"
+                    className="h-8 pl-8 text-xs rounded-lg"
                     value={sizeSearch}
                     onChange={event => setSizeSearch(event.target.value)}
                     placeholder="搜索 1920x680"
                   />
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-2 min-w-[140px]">
                   <Input
-                    className="h-9 text-xs"
+                    className="h-8 text-xs rounded-lg flex-1 min-w-0"
                     value={customSize}
                     onChange={event => setCustomSize(event.target.value)}
                     onKeyDown={event => { if (event.key === 'Enter') addCustomSize() }}
                     placeholder="宽x高"
                   />
-                  <Button variant="outline" size="sm" className="h-9 px-2 text-xs" onClick={addCustomSize}>
+                  <Button variant="outline" size="sm" className="h-8 px-3 text-xs rounded-lg shrink-0 border-border/80" onClick={addCustomSize}>
                     添加
                   </Button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-80 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 min-[1728px]:grid-cols-6 gap-2 max-h-72 overflow-y-auto pr-1">
                 {filteredSizes.map(size => {
                   const checked = outputScope === 'autoMaster'
                     ? sourcePlans.some(plan => plan.sizes.some(activeSize => activeSize.key === size.key))
@@ -1323,16 +1356,15 @@ export default function BannerCropView() {
                       key={size.key}
                       type="button"
                       onClick={() => toggleSize(size.key)}
-                      className={`h-9 px-2 rounded-md border text-xs flex items-center justify-between gap-2 transition-colors ${
-                        checked ? 'border-primary bg-primary/5 text-primary' : 'hover:bg-muted'
-                      }`}
+                      className={cn(
+                        'h-8 px-2.5 rounded-lg border text-xs flex items-center justify-between gap-1.5 transition-all font-mono',
+                        checked
+                          ? 'border-foreground bg-foreground text-background shadow-sm'
+                          : 'border-border/80 bg-card hover:border-foreground/40 hover:shadow-sm'
+                      )}
                     >
-                      <span className="font-mono truncate">{size.label}</span>
-                      <span className={`h-3.5 w-3.5 rounded-sm border flex items-center justify-center shrink-0 ${
-                        checked ? 'bg-primary border-primary text-primary-foreground' : 'border-input'
-                      }`}>
-                        {checked && <Check className="h-2.5 w-2.5" />}
-                      </span>
+                      <span className="truncate">{size.label}</span>
+                      {checked && <Check className="h-3 w-3 shrink-0" />}
                     </button>
                   )
                 })}
@@ -1340,50 +1372,59 @@ export default function BannerCropView() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <ImagePlus className="h-4 w-4" />
+                <div className="space-y-1">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <ImagePlus className="h-4 w-4 text-muted-foreground" />
                     原图预览
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    {sources.length > 0 ? `${sources.length} 张 · ${formatBytes(totalSourceSize)}` : '尚未上传原图'}
+                    {sources.length > 0 ? (
+                      <span className="tabular-nums">
+                        <span className="font-medium text-foreground">{sources.length}</span> 张
+                        <span className="mx-1.5 text-border">·</span>
+                        {formatBytes(totalSourceSize)}
+                      </span>
+                    ) : '尚未上传原图'}
                   </CardDescription>
                 </div>
                 {sources.length > 0 && (
-                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={resetAll}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-border/80" onClick={resetAll}>
                     <X className="h-3.5 w-3.5 mr-1" />
                     清空
                   </Button>
                 )}
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               {sources.length === 0 ? (
-                <div className="h-56 flex items-center justify-center border rounded-lg bg-muted/20 text-sm text-muted-foreground">
+                <div className="h-48 flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
                   先上传一张 Banner 原图
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-2 min-[1728px]:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
                   {sources.map(source => (
-                    <div key={source.id} className="relative group border rounded-md overflow-hidden bg-card">
-                      <div className="aspect-video bg-muted/30 flex items-center justify-center">
+                    <div
+                      key={source.id}
+                      className="relative group rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden transition-shadow hover:shadow-md"
+                    >
+                      <div className="aspect-video bg-muted/40 flex items-center justify-center p-2">
                         <img src={source.previewUrl} alt={source.name} className="max-w-full max-h-full object-contain" />
                       </div>
-                      <div className="p-2 space-y-1">
+                      <div className="p-2.5 space-y-1.5 border-t border-border/60 bg-muted/10">
                         <div className="text-xs font-medium truncate" title={source.name}>{source.name}</div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <Badge variant="secondary" className="font-mono text-[10px] px-1.5">{source.width}x{source.height}</Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <span className="font-mono px-1.5 py-0.5 rounded border border-border bg-background">{source.width}×{source.height}</span>
+                          <span className="truncate max-w-[120px] px-1.5 py-0.5 rounded border border-border bg-background" title={sourcePlanById.get(source.id)?.group.label || activeMasterGroup.label}>
                             {sourcePlanById.get(source.id)?.group.label || activeMasterGroup.label}
-                          </Badge>
-                          <span>{formatBytes(source.size)}</span>
+                          </span>
+                          <span className="tabular-nums">{formatBytes(source.size)}</span>
                         </div>
                       </div>
                       <button
-                        className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-foreground/80 text-background opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
                         onClick={() => removeSource(source.id)}
                         aria-label={`移除 ${source.name}`}
                       >
@@ -1397,39 +1438,53 @@ export default function BannerCropView() {
           </Card>
 
           {outputs.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <Card className="rounded-xl border border-border/80 shadow-sm">
+              <CardHeader className="px-4 pt-4 pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-foreground" />
                       裁剪结果
                     </CardTitle>
-                    <CardDescription className="text-xs">
-                      {outputs.length} 个文件 · {formatBytes(totalOutputSize)}
+                    <CardDescription className="text-xs tabular-nums">
+                      <span className="font-medium text-foreground">{outputs.length}</span> 个文件
+                      <span className="mx-1.5 text-border">·</span>
+                      {formatBytes(totalOutputSize)}
                     </CardDescription>
                   </div>
-                  <Button size="sm" onClick={downloadZip}>
-                    <FileArchive className="h-4 w-4 mr-1" />
-                    打包下载 ZIP（{outputs.length} 个文件）
+                  <Button
+                    size="sm"
+                    className={cn(downloadBtnClass, 'bg-foreground text-background hover:bg-foreground/90')}
+                    onClick={downloadZip}
+                  >
+                    <FileArchive className="h-3.5 w-3.5 mr-1.5" />
+                    打包下载 ZIP（{outputs.length}）
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-1">
+              <CardContent className="px-4 pb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-96 overflow-y-auto pr-1">
                   {outputs.slice(0, 80).map(output => (
-                    <div key={output.id} className="flex items-center gap-3 border rounded-md p-2">
-                      <div className="h-14 w-20 rounded bg-muted/30 border flex items-center justify-center overflow-hidden shrink-0">
+                    <div
+                      key={output.id}
+                      className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md"
+                    >
+                      <div className="h-14 w-20 rounded-lg bg-muted/40 border border-border/80 flex items-center justify-center overflow-hidden shrink-0">
                         <img src={output.url} alt={output.name} className="max-w-full max-h-full object-contain" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium truncate" title={output.path}>{output.name}</div>
-                        <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                          <Badge variant="outline" className="font-mono text-[10px] px-1.5">{output.width}x{output.height}</Badge>
+                        <div className="text-xs font-medium truncate font-mono" title={output.path}>{output.name}</div>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground tabular-nums">
+                          <span className="font-mono px-1 py-0.5 rounded border border-border">{output.width}×{output.height}</span>
                           <span>{formatBytes(output.blob.size)}</span>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => saveAs(output.blob, output.name)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(downloadBtnClass, 'border-border/80')}
+                        onClick={() => saveAs(output.blob, output.name)}
+                      >
                         <Download className="h-3.5 w-3.5 mr-1" />
                         下载
                       </Button>
@@ -1437,9 +1492,9 @@ export default function BannerCropView() {
                   ))}
                 </div>
                 {outputs.length > 80 && (
-                  <div className="text-xs text-muted-foreground text-center mt-3">
-                    已生成 {outputs.length} 个文件，列表仅预览前 80 个，ZIP 会包含全部文件。
-                  </div>
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    已生成 {outputs.length} 个文件，列表仅预览前 80 个，ZIP 包含全部。
+                  </p>
                 )}
               </CardContent>
             </Card>

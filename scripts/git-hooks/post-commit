@@ -1,0 +1,15 @@
+#!/bin/sh
+# Auto-push to origin after each successful commit (qdsc project).
+# Install: npm run hooks:install
+
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$root" || exit 0
+
+branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || exit 0
+
+echo "[post-commit] Pushing ${branch} to origin..."
+git -c "safe.directory=${root}" push origin "$branch" 2>&1 || {
+  echo "[post-commit] Push failed (will not block commit). Run: git push origin ${branch}"
+}
+
+exit 0

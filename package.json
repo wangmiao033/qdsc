@@ -11,7 +11,8 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "hooks:install": "powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
