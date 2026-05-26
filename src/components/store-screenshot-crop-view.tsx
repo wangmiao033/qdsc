@@ -138,6 +138,7 @@ export default function StoreScreenshotCropView() {
   const [activeSlot, setActiveSlot] = useState(1)
   const [activeSizeKey, setActiveSizeKey] = useState(STORE_OUTPUT_SIZES[0].key)
   const [outputs, setOutputs] = useState<StoreScreenshotOutput[]>([])
+  const [outputsStale, setOutputsStale] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isReading, setIsReading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -177,10 +178,11 @@ export default function StoreScreenshotCropView() {
     outputs.forEach(output => URL.revokeObjectURL(output.url))
     setOutputs([])
     setProgress(0)
+    setOutputsStale(false)
   }
 
   const setSlotAdjust = (slotIndex: number, patch: Partial<StoreCropAdjust>) => {
-    invalidateOutputs()
+    if (outputs.length > 0) setOutputsStale(true)
     setAdjusts(prev => ({
       ...prev,
       [slotIndex]: clampCropAdjust({ ...(prev[slotIndex] || DEFAULT_STORE_CROP_ADJUST), ...patch }),
@@ -199,9 +201,9 @@ export default function StoreScreenshotCropView() {
     return source
   }
 
-  const handleFiles = async (files: File[], startSlot?: number) => {
+  const handleFiles = async (files: File[], startSlot?: number, replaceInPlace = false) => {
     const imageFiles = files.filter(file =>
-      file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name)
+      file.type.startsWith('image/') || /\.(png|jpe?g|jpeg|webp)$/i.test(file.name)
     )
     if (imageFiles.length === 0) {
       toast({ title: '请选择图片', description: '支持 PNG / JPG / JPEG / WebP', variant: 'destructive' })
@@ -216,8 +218,10 @@ export default function StoreScreenshotCropView() {
 
     for (const file of imageFiles) {
       if (slot > STORE_SLOT_COUNT) break
-      while (slot <= STORE_SLOT_COUNT && nextSlots[slot]) {
-        slot += 1
+      if (!replaceInPlace) {
+        while (slot <= STORE_SLOT_COUNT && nextSlots[slot]) {
+          slot += 1
+        }
       }
       if (slot > STORE_SLOT_COUNT) break
       try {
@@ -294,10 +298,17 @@ export default function StoreScreenshotCropView() {
       setProgress
     )
     setOutputs(nextOutputs)
+    setOutputsStale(false)
     setIsGenerating(false)
 
     if (failed > 0) {
       toast({ title: `完成 ${nextOutputs.length} 张，失败 ${failed} 张`, variant: 'destructive' })
+    } else if (nextOutputs.length !== STORE_TOTAL_OUTPUTS) {
+      toast({
+        title: `已生成 ${nextOutputs.length} 张`,
+        description: `预期 ${STORE_TOTAL_OUTPUTS} 张，请检查是否缺图`,
+        variant: 'destructive',
+      })
     } else {
       toast({ title: `已生成 ${nextOutputs.length} 张`, description: `${STORE_OUTPUT_SIZES.length} 尺寸 × 5 图` })
     }
@@ -338,6 +349,15 @@ export default function StoreScreenshotCropView() {
         </Button>
       </div>
 
+      {outputsStale && outputs.length > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">裁剪参数已调整，请重新生成以更新导出文件</span>
+          <Button size="sm" className="h-7 text-xs rounded-lg" onClick={() => void handleGenerate()}>
+            重新生成
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-5 min-[1440px]:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-4 min-[1440px]:sticky min-[1440px]:top-4 min-[1440px]:self-start">
           <Card className="rounded-xl border border-border/80 shadow-sm">
@@ -352,11 +372,11 @@ export default function StoreScreenshotCropView() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
                 multiple
                 className="sr-only"
                 onChange={event => {
-                  void handleFiles(Array.from(event.target.files || []), pendingSlotRef.current)
+                  void handleFiles(Array.from(event.target.files || []), pendingSlotRef.current, true)
                 }}
               />
               <div
@@ -662,8 +682,10 @@ function SizePreviewThumb({
   return (
     <canvas
       ref={canvasRef}
-      className="w-full bg-muted"
-      style={{ aspectRatio: `${size.width} / ${size.height}` }}
+      className="w-full bg-muted block"
+      width={canvasSize.width}
+      height={canvasSize.height}
+      style={{ maxWidth: '100%', height: 'auto' }}
     />
   )
 }

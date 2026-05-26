@@ -111,6 +111,8 @@ export function drawStoreScreenshotCrop(
     clampCropAdjust(adjust)
   )
 
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(0, 0, target.width, target.height)
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(
@@ -177,7 +179,9 @@ export async function generateAllStoreScreenshotOutputs(
   const total = STORE_OUTPUT_SIZES.length * sources.length
   let done = 0
 
-  for (const source of sources) {
+  const orderedSources = [...sources].sort((a, b) => a.slotIndex - b.slotIndex)
+
+  for (const source of orderedSources) {
     const adjust = clampCropAdjust(adjusts[source.slotIndex] || DEFAULT_STORE_CROP_ADJUST)
     const slotMeta = STORE_SCREENSHOT_SLOTS.find(slot => slot.index === source.slotIndex)
     const fileStem = slotMeta?.fileName || String(source.slotIndex).padStart(2, '0')
