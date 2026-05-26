@@ -44,8 +44,10 @@ interface BannerSize {
 
 interface MasterGroup {
   id: string
+  code: string
   label: string
   master: string
+  masterFileName: string
   description: string
   sizes: string[]
 }
@@ -102,45 +104,75 @@ const RAW_BANNER_SIZE_PRESETS = [
 const MASTER_GROUPS: MasterGroup[] = [
   {
     id: 'wide-16-9',
+    code: '01',
     label: '1920x1080 横版主图母版',
     master: '1920x1080',
+    masterFileName: '01_1920x1080_landscape_main.png',
     description: '16:9 横版，适合主视觉横图',
     sizes: ['640x360', '800x450', '960x540', '1024x576', '1080x608', '1280x720', '1920x1080'],
   },
   {
     id: 'long-banner',
+    code: '02',
     label: '1920x640 长条横幅母版',
     master: '1920x640',
-    description: '长条横幅，适合顶部 Banner 和推广条',
+    masterFileName: '02_1920x640_wide_banner.png',
+    description: '3:1 长条横幅，适合顶部 Banner 和推广长条',
     sizes: ['750x250', '900x300', '970x340', '1000x300', '1008x372', '1200x400', '1920x452', '1920x500', '1920x600', '1920x640'],
   },
   {
     id: 'portrait-9-16',
+    code: '03',
     label: '1080x1920 手机竖版母版',
     master: '1080x1920',
-    description: '9:16 竖版，适合开屏和竖版投放',
-    sizes: ['720x1280', '750x1334', '750x1350', '880x1200', '900x1200', '1080x1560', '1080x1920', '1080x2160', '1080x2400'],
+    masterFileName: '03_1080x1920_vertical_9x16.png',
+    description: '9:16 竖版，适合手机竖屏广告、H5 分享图',
+    sizes: ['360x640', '720x1280', '750x1334', '750x1350', '1080x1800', '1080x1920', '1080x2160', '1080x2400'],
   },
   {
     id: 'square',
+    code: '04',
     label: '1024x1024 方图母版',
     master: '1024x1024',
-    description: '1:1 方图，适合图标式方形广告位',
-    sizes: ['450x450', '640x640', '750x750', '800x800', '984x984', '1024x1024', '1080x1080'],
+    masterFileName: '04_1024x1024_square.png',
+    description: '1:1 方图，适合 Icon、方形广告、方图封面',
+    sizes: ['175x175', '450x450', '640x640', '750x750', '800x800', '984x984', '1024x1024', '1080x1080'],
   },
   {
     id: 'wide-2-1',
+    code: '05',
     label: '2000x1000 2:1 宽横版母版',
     master: '2000x1000',
-    description: '宽横版封面，介于 16:9 和长条之间',
-    sizes: ['500x250', '600x300', '700x360', '720x350', '900x450', '1000x500', '2000x1000', '2400x1000'],
+    masterFileName: '05_2000x1000_ratio_2x1.png',
+    description: '2:1 宽横版，适合宽横版广告、详情页横图',
+    sizes: ['500x250', '600x300', '700x360', '720x350', '900x450', '1000x500', '1020x510', '2000x1000', '2400x1000'],
   },
   {
     id: 'portrait-medium',
+    code: '06',
     label: '1080x1440 中竖版母版',
     master: '1080x1440',
-    description: '中竖版，适合 3:4 附近素材',
-    sizes: ['720x890', '750x920', '750x1252', '834x1236', '880x1200', '900x1200', '1080x1440', '1080x1560'],
+    masterFileName: '06_1080x1440_vertical_3x4.png',
+    description: '3:4 / 4:5 附近，适合普通中竖版素材',
+    sizes: ['720x890', '750x920', '880x1200', '900x1200', '1080x1440'],
+  },
+  {
+    id: 'portrait-narrow',
+    code: '07',
+    label: '1080x1600 窄中竖版母版',
+    master: '1080x1600',
+    masterFileName: '07_1080x1600_vertical_narrow.png',
+    description: '约 0.675 比例，比 1080x1440 更高更窄的中竖版',
+    sizes: ['834x1236', '1080x1560'],
+  },
+  {
+    id: 'special-750x1252',
+    code: '08',
+    label: '750x1252 专用竖版母版',
+    master: '750x1252',
+    masterFileName: '08_750x1252_special_vertical.png',
+    description: '专用比例，避免 Logo、主标题、福利图标被裁',
+    sizes: ['750x1252'],
   },
 ]
 
@@ -244,10 +276,51 @@ function getMasterRatio(group: MasterGroup) {
   return master.width / master.height
 }
 
+function getMasterGroupById(id: string) {
+  return MASTER_GROUPS.find(group => group.id === id) || MASTER_GROUPS[0]
+}
+
+function matchMasterGroupByRatio(width: number, height: number): MasterGroup | null {
+  const sizeKey = `${width}x${height}`
+  if (sizeKey === '750x1252') return getMasterGroupById('special-750x1252')
+
+  const ratio = width / height
+  if (ratio >= 1.65 && ratio <= 1.85) return getMasterGroupById('wide-16-9')
+  if (ratio >= 2.75 && ratio <= 3.20) return getMasterGroupById('long-banner')
+  if (ratio >= 1.90 && ratio <= 2.15) return getMasterGroupById('wide-2-1')
+  if (ratio >= 0.95 && ratio <= 1.05) return getMasterGroupById('square')
+  if (ratio >= 0.54 && ratio <= 0.60) return getMasterGroupById('portrait-9-16')
+  if (ratio >= 0.72 && ratio <= 0.82) return getMasterGroupById('portrait-medium')
+  if (ratio >= 0.65 && ratio <= 0.70) return getMasterGroupById('portrait-narrow')
+  return null
+}
+
+function findMasterGroupForTargetSize(width: number, height: number) {
+  const sizeKey = `${width}x${height}`
+  const owner = MASTER_GROUPS.find(group => group.sizes.includes(sizeKey))
+  if (owner) return owner
+
+  const exactMaster = MASTER_GROUPS.find(group => group.master === sizeKey)
+  if (exactMaster) return exactMaster
+
+  const ratioMatch = matchMasterGroupByRatio(width, height)
+  if (ratioMatch) return ratioMatch
+
+  return MASTER_GROUPS.reduce((best, group) => {
+    const targetRatio = width / height
+    const bestDiff = Math.abs(targetRatio - getMasterRatio(best))
+    const groupDiff = Math.abs(targetRatio - getMasterRatio(group))
+    return groupDiff < bestDiff ? group : best
+  }, MASTER_GROUPS[0])
+}
+
 function findBestMasterGroup(source: BannerSource) {
   const sourceKey = `${source.width}x${source.height}`
   const exactMatch = MASTER_GROUPS.find(group => group.master === sourceKey)
   if (exactMatch) return exactMatch
+
+  const ratioMatch = matchMasterGroupByRatio(source.width, source.height)
+  if (ratioMatch) return ratioMatch
 
   const sourceRatio = source.width / source.height
   return MASTER_GROUPS.reduce((best, group) => {
@@ -787,6 +860,7 @@ export default function BannerCropView() {
 
     type OutputGroup = MasterGroup | {
       id: string
+      code: string
       label: string
       master: string
       description: string
@@ -805,20 +879,27 @@ export default function BannerCropView() {
       const groupSizes = getGroupSizes(activeMasterGroup)
       const isExactGroupSelection = selectedSizeList.length === groupSizes.length
         && groupSizes.every(size => selectedSizes.has(size.key))
-      const outputGroup: OutputGroup = isExactGroupSelection
-        ? activeMasterGroup
-        : {
-          id: 'manual',
-          label: '手动尺寸',
-          master: 'manual',
-          description: '',
-          sizes: activeSizeList.map(size => size.key),
-        }
-      plans = sources.map(source => ({
-        source,
-        group: outputGroup,
-        sizes: activeSizeList,
-      }))
+      if (isExactGroupSelection) {
+        plans = sources.map(source => ({
+          source,
+          group: activeMasterGroup,
+          sizes: activeSizeList,
+        }))
+      } else {
+        plans = sources.flatMap(source => {
+          const sizesByGroup = new Map<string, BannerSize[]>()
+          for (const size of activeSizeList) {
+            const sizeGroup = findMasterGroupForTargetSize(size.width, size.height)
+            if (!sizesByGroup.has(sizeGroup.id)) sizesByGroup.set(sizeGroup.id, [])
+            sizesByGroup.get(sizeGroup.id)!.push(size)
+          }
+          return [...sizesByGroup.values()].map(sizes => ({
+            source,
+            group: findMasterGroupForTargetSize(sizes[0].width, sizes[0].height),
+            sizes,
+          }))
+        })
+      }
     }
 
     const total = plans.reduce((sum, plan) => sum + plan.sizes.length, 0)
@@ -829,11 +910,12 @@ export default function BannerCropView() {
         try {
           const blob = await drawBanner(source, size)
           const safeBaseName = sanitizeName(source.baseName)
-          const fileName = `${safeBaseName}_${size.label}.${outputExt}`
-          const groupFolder = sanitizeName(group.label)
+          const sizeGroup = 'code' in group ? group : findMasterGroupForTargetSize(size.width, size.height)
+          const fileName = `${sizeGroup.code}_${size.label}.${outputExt}`
+          const groupFolder = sanitizeName(sizeGroup.label)
           const useNestedPath = sources.length > 1 || outputScope === 'autoMaster'
           const rawPath = useNestedPath
-            ? `${groupFolder}/${safeBaseName}/${fileName}`
+            ? `${groupFolder}/${fileName}`
             : fileName
           const path = getUniquePath(rawPath, usedPaths)
           const url = URL.createObjectURL(blob)
@@ -841,7 +923,7 @@ export default function BannerCropView() {
             id: `${source.id}-${size.key}`,
             sourceId: source.id,
             sourceBaseName: safeBaseName,
-            masterGroup: group.label,
+            masterGroup: sizeGroup.label,
             name: path.split('/').pop() || fileName,
             path,
             width: size.width,
@@ -1104,7 +1186,7 @@ export default function BannerCropView() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
                 {MASTER_GROUPS.map(group => {
                   const groupSizes = getGroupSizes(group)
                   const ratio = getMasterRatio(group)
@@ -1126,8 +1208,13 @@ export default function BannerCropView() {
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{group.label}</div>
                           <div className="text-[11px] text-muted-foreground mt-0.5">{group.description}</div>
+                          <div className="text-[10px] text-muted-foreground/80 mt-0.5 font-mono truncate" title={group.masterFileName}>
+                            母版文件：{group.masterFileName}
+                          </div>
                         </div>
-                        <Badge variant={isActiveGroup ? 'default' : 'secondary'} className="font-mono text-[10px] px-1.5 shrink-0">{group.master}</Badge>
+                        <Badge variant={isActiveGroup ? 'default' : 'secondary'} className="font-mono text-[10px] px-1.5 shrink-0">
+                          {group.code} · {group.master}
+                        </Badge>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                         <span>{groupSizes.length} 个尺寸</span>
