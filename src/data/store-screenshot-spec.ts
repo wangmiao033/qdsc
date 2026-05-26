@@ -69,7 +69,7 @@ export const STORE_SCREENSHOT_MASTERS: StoreScreenshotMaster[] = [
   {
     code: '04',
     master: '750x1350',
-    ratioLabel: '特殊竖图',
+    ratioLabel: '5:9 / 特殊近9:16',
     label: '特殊竖图母版',
     sizes: ['480x835', '750x1350'],
   },

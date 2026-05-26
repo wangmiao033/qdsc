@@ -169,14 +169,15 @@ export function buildStoreOutputPath(sizeKey: string, slotFileName: string) {
   return `${STORE_ZIP_ROOT}/${sizeKey}/${slotFileName}.png`
 }
 
-export async function generateAllStoreScreenshotOutputs(
+export async function generateStoreScreenshotOutputs(
   sources: StoreScreenshotSource[],
   adjusts: Record<number, StoreCropAdjust>,
+  targetSizes: StoreOutputSize[],
   onProgress?: (percent: number) => void
 ) {
   const outputs: StoreScreenshotOutput[] = []
   let failed = 0
-  const total = STORE_OUTPUT_SIZES.length * sources.length
+  const total = targetSizes.length * sources.length
   let done = 0
 
   const orderedSources = [...sources].sort((a, b) => a.slotIndex - b.slotIndex)
@@ -186,7 +187,7 @@ export async function generateAllStoreScreenshotOutputs(
     const slotMeta = STORE_SCREENSHOT_SLOTS.find(slot => slot.index === source.slotIndex)
     const fileStem = slotMeta?.fileName || String(source.slotIndex).padStart(2, '0')
 
-    for (const size of STORE_OUTPUT_SIZES) {
+    for (const size of targetSizes) {
       try {
         const canvas = drawStoreScreenshotCrop(source.image, size, adjust)
         const blob = await canvasToPngBlob(canvas)
@@ -213,6 +214,15 @@ export async function generateAllStoreScreenshotOutputs(
   }
 
   return { outputs, failed }
+}
+
+/** 生成全部 12 个 Store Screenshot 尺寸 */
+export async function generateAllStoreScreenshotOutputs(
+  sources: StoreScreenshotSource[],
+  adjusts: Record<number, StoreCropAdjust>,
+  onProgress?: (percent: number) => void
+) {
+  return generateStoreScreenshotOutputs(sources, adjusts, STORE_OUTPUT_SIZES, onProgress)
 }
 
 export function formatBytes(bytes: number) {

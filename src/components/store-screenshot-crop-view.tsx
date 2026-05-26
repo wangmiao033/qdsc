@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Crop, Download, FileArchive, ImagePlus, Loader2, Maximize2, Move,
-  RefreshCw, Smartphone,   Trash2, Upload, ZoomIn
+  RefreshCw, Smartphone, Trash2, Upload, ZoomIn
 } from 'lucide-react'
 import {
   STORE_OUTPUT_SIZES,
@@ -20,11 +20,18 @@ import {
   drawStoreScreenshotCrop,
   formatBytes,
   generateAllStoreScreenshotOutputs,
+  generateStoreScreenshotOutputs,
   readStoreScreenshotSource,
   type StoreCropAdjust,
   type StoreScreenshotOutput,
   type StoreScreenshotSource,
 } from '@/lib/store-screenshot-crop'
+import {
+  findBestStoreMasterForSource,
+  formatStoreMasterLabel,
+  getSizesForStoreMaster,
+  getStoreMasterByKey,
+} from '@/lib/store-screenshot-masters'
 import { cn } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
@@ -34,7 +41,11 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+
+type MasterScope = 'auto' | 'manual'
+type GenerateMode = 'current' | 'all'
 
 const PREVIEW_MAX = 280
 
@@ -137,7 +148,10 @@ export default function StoreScreenshotCropView() {
     return init
   })
   const [activeSlot, setActiveSlot] = useState(1)
-  const [activeSizeKey, setActiveSizeKey] = useState(STORE_OUTPUT_SIZES[0].key)
+  const [activeSizeKey, setActiveSizeKey] = useState('1080x1920')
+  const [activeMasterKey, setActiveMasterKey] = useState(STORE_SCREENSHOT_MASTERS[0].master)
+  const [masterScope, setMasterScope] = useState<MasterScope>('auto')
+  const [lastGenerateMode, setLastGenerateMode] = useState<GenerateMode>('current')
   const [outputs, setOutputs] = useState<StoreScreenshotOutput[]>([])
   const [outputsStale, setOutputsStale] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -154,8 +168,6 @@ export default function StoreScreenshotCropView() {
 
   const uploadedCount = Object.keys(slots).length
   const activeSource = slots[activeSlot]
-  const activeSize = STORE_OUTPUT_SIZES.find(size => size.key === activeSizeKey) || STORE_OUTPUT_SIZES[0]
-  const activeAdjust = adjusts[activeSlot] || DEFAULT_STORE_CROP_ADJUST
   const allReady = uploadedCount === STORE_SLOT_COUNT
   const totalOutputSize = outputs.reduce((sum, output) => sum + output.blob.size, 0)
 
@@ -165,6 +177,25 @@ export default function StoreScreenshotCropView() {
       .filter((source): source is StoreScreenshotSource => Boolean(source)),
     [slots]
   )
+
+  const referenceSource = slots[1] || sourcesList[0]
+
+  const autoMatchedMaster = useMemo(() => {
+    if (!referenceSource) return null
+    return findBestStoreMasterForSource(referenceSource.width, referenceSource.height)
+  }, [referenceSource])
+
+  const effectiveMasterKey = masterScope === 'auto' && autoMatchedMaster
+    ? autoMatchedMaster.master
+    : activeMasterKey
+
+  const activeMaster = useMemo(() => getStoreMasterByKey(effectiveMasterKey), [effectiveMasterKey])
+  const activeMasterSizes = useMemo(() => getSizesForStoreMaster(activeMaster), [activeMaster])
+  const activeSize = activeMasterSizes.find(size => size.key === activeSizeKey)
+    || activeMasterSizes[0]
+    || STORE_OUTPUT_SIZES[0]
+  const activeAdjust = adjusts[activeSlot] || DEFAULT_STORE_CROP_ADJUST
+  const currentOutputCount = activeMasterSizes.length * STORE_SLOT_COUNT
 
   useEffect(() => { slotsRef.current = slots }, [slots])
   useEffect(() => { outputsRef.current = outputs }, [outputs])
@@ -271,6 +302,10 @@ export default function StoreScreenshotCropView() {
     }
     setAdjusts(init)
     setActiveSlot(1)
+    setActiveMasterKey(STORE_SCREENSHOT_MASTERS[0].master)
+    setMasterScope('auto')
+    setActiveSizeKey(STORE_SCREENSHOT_MASTERS[0].sizes[0])
+    setLastGenerateMode('current')
   }
 
   const openPicker = (slotIndex: number) => {
@@ -279,7 +314,21 @@ export default function StoreScreenshotCropView() {
     fileInputRef.current?.click()
   }
 
-  const handleGenerate = async () => {
+  const selectMaster = (masterKey: string) => {
+    invalidateOutputs()
+    setMasterScope('manual')
+    setActiveMasterKey(masterKey)
+    const sizes = getSizesForStoreMaster(getStoreMasterByKey(masterKey))
+    if (sizes[0]) setActiveSizeKey(sizes[0].key)
+  }
+
+  const enableAutoMaster = () => {
+    invalidateOutputs()
+    setMasterScope('auto')
+    toast({ title: '已切换为自动匹配', description: '根据图1（玩法亮点）尺寸识别 Store 母版' })
+  }
+
+  const runGenerate = async (mode: GenerateMode) => {
     if (!allReady || isGenerating) {
       if (!allReady) {
         toast({
@@ -291,27 +340,34 @@ export default function StoreScreenshotCropView() {
       return
     }
 
+    const targetSizes = mode === 'all' ? STORE_OUTPUT_SIZES : activeMasterSizes
+    const expected = targetSizes.length * STORE_SLOT_COUNT
+
     invalidateOutputs()
     setIsGenerating(true)
-    const { outputs: nextOutputs, failed } = await generateAllStoreScreenshotOutputs(
-      sourcesList,
-      adjusts,
-      setProgress
-    )
+    setLastGenerateMode(mode)
+
+    const { outputs: nextOutputs, failed } = mode === 'all'
+      ? await generateAllStoreScreenshotOutputs(sourcesList, adjusts, setProgress)
+      : await generateStoreScreenshotOutputs(sourcesList, adjusts, targetSizes, setProgress)
+
     setOutputs(nextOutputs)
     setOutputsStale(false)
     setIsGenerating(false)
 
     if (failed > 0) {
       toast({ title: `完成 ${nextOutputs.length} 张，失败 ${failed} 张`, variant: 'destructive' })
-    } else if (nextOutputs.length !== STORE_TOTAL_OUTPUTS) {
+    } else if (nextOutputs.length !== expected) {
       toast({
         title: `已生成 ${nextOutputs.length} 张`,
-        description: `预期 ${STORE_TOTAL_OUTPUTS} 张，请检查是否缺图`,
+        description: `预期 ${expected} 张，请检查`,
         variant: 'destructive',
       })
     } else {
-      toast({ title: `已生成 ${nextOutputs.length} 张`, description: `${STORE_OUTPUT_SIZES.length} 尺寸 × 5 图` })
+      const sizeHint = mode === 'all'
+        ? `全部 ${STORE_OUTPUT_SIZES.length} 尺寸 × 5 图`
+        : `${activeMaster.label} · ${activeMasterSizes.length} 尺寸 × 5 图`
+      toast({ title: `已生成 ${nextOutputs.length} 张`, description: sizeHint })
     }
   }
 
@@ -341,7 +397,7 @@ export default function StoreScreenshotCropView() {
             商店五图母版裁剪
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Store Screenshot 五图 · 独立于 Banner · 12 尺寸 × 5 张 = 60 张输出
+            Store Screenshot 五图 · 独立 4 套母版（非 Banner）· 默认按当前母版生成
           </p>
         </div>
         <Button variant="outline" size="sm" className="h-8 rounded-lg" onClick={resetAll} disabled={uploadedCount === 0 && outputs.length === 0}>
@@ -353,11 +409,73 @@ export default function StoreScreenshotCropView() {
       {outputsStale && outputs.length > 0 && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
           <span className="text-muted-foreground">裁剪参数已调整，请重新生成以更新导出文件</span>
-          <Button size="sm" className="h-7 text-xs rounded-lg" onClick={() => void handleGenerate()}>
+          <Button size="sm" className="h-7 text-xs rounded-lg" onClick={() => void runGenerate(lastGenerateMode)}>
             重新生成
           </Button>
         </div>
       )}
+
+      <Card className="rounded-xl border border-border/80 shadow-sm">
+        <CardHeader className="px-4 pt-4 pb-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <CardTitle className="text-sm font-medium">母版分类（Store Screenshot）</CardTitle>
+              <CardDescription className="text-xs">
+                当前匹配：
+                <span className="font-medium text-foreground">{formatStoreMasterLabel(activeMaster)}</span>
+                {masterScope === 'auto' && autoMatchedMaster && (
+                  <span className="text-muted-foreground"> · 自动（参考图1 {referenceSource?.width}×{referenceSource?.height}）</span>
+                )}
+                {masterScope === 'manual' && (
+                  <span className="text-muted-foreground"> · 手动选择</span>
+                )}
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  'h-8 text-xs rounded-lg',
+                  masterScope === 'auto' && 'bg-foreground text-background border-foreground hover:bg-foreground/90 hover:text-background'
+                )}
+                onClick={enableAutoMaster}
+              >
+                自动匹配
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">切换 Store 母版（非 Banner）</Label>
+              <Select value={effectiveMasterKey} onValueChange={selectMaster}>
+                <SelectTrigger className="h-8 text-xs rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STORE_SCREENSHOT_MASTERS.map(master => (
+                    <SelectItem key={master.master} value={master.master} className="text-xs">
+                      {formatStoreMasterLabel(master)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-xs text-muted-foreground sm:text-right pb-1">
+              本母版输出 <span className="font-semibold text-foreground tabular-nums">{currentOutputCount}</span> 张
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {activeMasterSizes.map(size => (
+              <Badge key={size.key} variant="secondary" className="text-[10px] font-mono px-1.5">
+                {size.key}
+              </Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-5 min-[1440px]:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-4 min-[1440px]:sticky min-[1440px]:top-4 min-[1440px]:self-start">
@@ -456,11 +574,11 @@ export default function StoreScreenshotCropView() {
                   <div className="text-[10px] text-muted-foreground">已上传</div>
                 </div>
                 <div className="flex-1 py-2">
-                  <div className="text-base font-semibold tabular-nums">{STORE_OUTPUT_SIZES.length}</div>
-                  <div className="text-[10px] text-muted-foreground">目标尺寸</div>
+                  <div className="text-base font-semibold tabular-nums">{activeMasterSizes.length}</div>
+                  <div className="text-[10px] text-muted-foreground">当前母版尺寸</div>
                 </div>
                 <div className="flex-1 py-2">
-                  <div className="text-base font-semibold tabular-nums">{STORE_TOTAL_OUTPUTS}</div>
+                  <div className="text-base font-semibold tabular-nums">{currentOutputCount}</div>
                   <div className="text-[10px] text-muted-foreground">预计输出</div>
                 </div>
               </div>
@@ -472,13 +590,21 @@ export default function StoreScreenshotCropView() {
               <Button
                 className="w-full h-9 rounded-lg bg-foreground text-background hover:bg-foreground/90"
                 disabled={!allReady || isGenerating || isReading}
-                onClick={() => void handleGenerate()}
+                onClick={() => void runGenerate('current')}
               >
                 {isGenerating ? (
                   <><Loader2 className="h-4 w-4 mr-1 animate-spin" />生成中...</>
                 ) : (
-                  <><Crop className="h-4 w-4 mr-1" />生成全部尺寸（{STORE_TOTAL_OUTPUTS} 张）</>
+                  <><Crop className="h-4 w-4 mr-1" />生成当前母版尺寸（{currentOutputCount} 张）</>
                 )}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-8 rounded-lg text-xs border-border/80"
+                disabled={!allReady || isGenerating || isReading}
+                onClick={() => void runGenerate('all')}
+              >
+                生成全部尺寸（{STORE_TOTAL_OUTPUTS} 张）
               </Button>
               {isGenerating && <Progress value={progress} className="h-1.5" />}
               {outputs.length > 0 && (
@@ -548,12 +674,14 @@ export default function StoreScreenshotCropView() {
 
             <Card className="rounded-xl border border-border/80 shadow-sm">
               <CardHeader className="px-4 pt-4 pb-2">
-                <CardTitle className="text-sm font-medium">目标尺寸（12）</CardTitle>
-                <CardDescription className="text-xs">点击尺寸查看五图同尺寸预览</CardDescription>
+                <CardTitle className="text-sm font-medium">
+                  目标尺寸（当前母版 {activeMasterSizes.length} / 全部 {STORE_OUTPUT_SIZES.length}）
+                </CardTitle>
+                <CardDescription className="text-xs">仅显示当前母版覆盖尺寸 · 点击预览五图效果</CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <div className="flex flex-wrap gap-1.5">
-                  {STORE_OUTPUT_SIZES.map(size => (
+                  {activeMasterSizes.map(size => (
                     <button
                       key={size.key}
                       type="button"
@@ -605,22 +733,45 @@ export default function StoreScreenshotCropView() {
 
           <Card className="rounded-xl border border-border/80 shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-medium">Store Screenshot 母版（4 套 · 只读）</CardTitle>
-              <CardDescription className="text-xs">与 Banner 无关 · 每套母版覆盖的渠道输出尺寸如下</CardDescription>
+              <CardTitle className="text-sm font-medium">Store Screenshot 母版一览（4 套）</CardTitle>
+              <CardDescription className="text-xs">独立于 Banner 16 类 · 点击切换母版</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-4 gap-3">
-                {STORE_SCREENSHOT_MASTERS.map(master => (
-                  <div key={master.code} className="rounded-xl border border-border/80 p-3 text-xs">
-                    <div className="font-mono text-[10px] text-muted-foreground">{master.code} · {master.master} · {master.ratioLabel}</div>
-                    <div className="text-sm font-medium mt-0.5">{master.label}</div>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {master.sizes.map(key => (
-                        <Badge key={key} variant="outline" className="text-[9px] px-1 py-0 font-mono">{key}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                {STORE_SCREENSHOT_MASTERS.map(master => {
+                  const isSelected = effectiveMasterKey === master.master
+                  return (
+                    <button
+                      key={master.code}
+                      type="button"
+                      onClick={() => selectMaster(master.master)}
+                      className={cn(
+                        'text-left rounded-xl border p-3 text-xs transition-all',
+                        isSelected
+                          ? 'border-foreground bg-foreground text-background shadow-md'
+                          : 'border-border/80 bg-card hover:border-foreground/35'
+                      )}
+                    >
+                      <div className={cn('font-mono text-[10px]', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
+                        {master.code} · {master.master} · {master.ratioLabel}
+                      </div>
+                      <div className="text-sm font-medium mt-0.5">{master.label}</div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {master.sizes.map(key => (
+                          <span
+                            key={key}
+                            className={cn(
+                              'font-mono text-[9px] px-1 py-0.5 rounded border',
+                              isSelected ? 'border-background/30 bg-background/15' : 'border-border text-muted-foreground'
+                            )}
+                          >
+                            {key}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>
