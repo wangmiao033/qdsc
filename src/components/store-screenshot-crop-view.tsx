@@ -12,6 +12,7 @@ import {
   STORE_SLOT_COUNT,
   STORE_TOTAL_OUTPUTS,
   STORE_ZIP_ROOT,
+  type StoreOutputSize,
 } from '@/data/store-screenshot-spec'
 import {
   clampCropAdjust,
@@ -52,7 +53,7 @@ function CropPreviewCanvas({
   onAdjustChange,
 }: {
   source: StoreScreenshotSource
-  target: { width: number; height: number }
+  target: StoreOutputSize
   adjust: StoreCropAdjust
   onAdjustChange: (next: StoreCropAdjust) => void
 }) {
@@ -662,7 +663,7 @@ function SizePreviewThumb({
   adjust,
 }: {
   source: StoreScreenshotSource
-  size: { width: number; height: number; key: string }
+  size: StoreOutputSize
   adjust: StoreCropAdjust
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
