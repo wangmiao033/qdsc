@@ -308,7 +308,7 @@ export default function BannerCropBatchView() {
       plans,
       cropSettings,
       setProgress,
-      { layout: 'flat', useFormatFolder: true }
+      { layout: 'flat', useFormatFolder: false }
     )
 
     setOutputs(nextOutputs)
@@ -848,7 +848,7 @@ export default function BannerCropBatchView() {
                   <div>
                     <CardTitle className="text-sm font-medium">生成结果</CardTitle>
                     <CardDescription className="text-xs">
-                      {outputs.length} 个文件 · {formatBytes(totalOutputSize)} · ZIP 内平铺于 jpg/（文件名 宽×高.jpg）
+                      {outputs.length} 个文件 · {formatBytes(totalOutputSize)} · ZIP 平铺于 {outputFormat}/，命名 宽×高.{outputFormat}
                     </CardDescription>
                   </div>
                   <Button
