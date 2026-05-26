@@ -19,6 +19,7 @@ import {
   DEFAULT_STORE_CROP_ADJUST,
   drawStoreScreenshotCrop,
   formatBytes,
+  buildStoreScreenshotZipFileName,
   generateAllStoreScreenshotOutputs,
   generateStoreScreenshotOutputs,
   readStoreScreenshotSource,
@@ -382,7 +383,10 @@ export default function StoreScreenshotCropView() {
         folder?.file(output.name, output.blob)
       })
       const blob = await zip.generateAsync({ type: 'blob' })
-      saveAs(blob, `${STORE_ZIP_ROOT}.zip`)
+      const zipName = buildStoreScreenshotZipFileName(outputs, {
+        masterKey: lastGenerateMode === 'current' ? effectiveMasterKey : undefined,
+      })
+      saveAs(blob, zipName)
     } finally {
       setIsZipping(false)
     }

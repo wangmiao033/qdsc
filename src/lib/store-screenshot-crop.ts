@@ -169,6 +169,39 @@ export function buildStoreOutputPath(sizeKey: string, slotFileName: string) {
   return `${STORE_ZIP_ROOT}/${sizeKey}/${slotFileName}.png`
 }
 
+function sortSizeLabel(a: string, b: string) {
+  const [aw, ah] = a.split('x').map(Number)
+  const [bw, bh] = b.split('x').map(Number)
+  return aw - bw || ah - bh
+}
+
+/** ZIP 文件名按所含尺寸命名，例如 store-screenshot_1080x1920_360x640+720x1280_20files.zip */
+export function buildStoreScreenshotZipFileName(
+  outputs: StoreScreenshotOutput[],
+  options?: { masterKey?: string }
+) {
+  if (outputs.length === 0) return `${STORE_ZIP_ROOT}.zip`
+
+  const uniqueSizes = [...new Set(outputs.map(output => output.sizeKey))].sort(sortSizeLabel)
+  const count = outputs.length
+
+  let sizeTag: string
+  if (uniqueSizes.length <= 5) {
+    sizeTag = uniqueSizes.join('+')
+  } else {
+    sizeTag = `${uniqueSizes[0]}_to_${uniqueSizes[uniqueSizes.length - 1]}_${uniqueSizes.length}sizes`
+  }
+
+  const masterTag = options?.masterKey ? `_${options.masterKey}` : ''
+  let fileName = `store-screenshot${masterTag}_${sizeTag}_${count}files.zip`
+
+  if (fileName.length > 220) {
+    fileName = `store-screenshot${masterTag}_${uniqueSizes.length}sizes_${count}files.zip`
+  }
+
+  return fileName
+}
+
 export async function generateStoreScreenshotOutputs(
   sources: StoreScreenshotSource[],
   adjusts: Record<number, StoreCropAdjust>,
