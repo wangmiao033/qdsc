@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Crop, Download, FileArchive, ImagePlus, Loader2, Maximize2, Move,
-  RefreshCw, Smartphone, Trash2, Upload, ZoomIn
+  Crop, Download, FileArchive, FolderOpen, ImagePlus, Loader2,
+  Maximize2, Move, RefreshCw, Smartphone, Trash2, Upload, ZoomIn
 } from 'lucide-react'
 import {
   STORE_OUTPUT_SIZES,
@@ -34,6 +34,11 @@ import {
   getSizesForStoreMaster,
   getStoreMasterByKey,
 } from '@/lib/store-screenshot-masters'
+import {
+  describeSlotAssignments,
+  filterStoreImageFiles,
+  planStoreScreenshotSlotAssignments,
+} from '@/lib/store-screenshot-upload'
 import { cn } from '@/lib/utils'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
@@ -162,8 +167,11 @@ export default function StoreScreenshotCropView() {
   const [isZipping, setIsZipping] = useState(false)
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const batchFileInputRef = useRef<HTMLInputElement | null>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
   const pendingSlotRef = useRef<number>(1)
   const dragCounterRef = useRef(0)
+  const slotDragCounterRef = useRef(0)
   const slotsRef = useRef(slots)
   const outputsRef = useRef(outputs)
   const { toast } = useToast()
@@ -235,38 +243,27 @@ export default function StoreScreenshotCropView() {
     return source
   }
 
-  const handleFiles = async (files: File[], startSlot?: number, replaceInPlace = false) => {
-    const imageFiles = files.filter(file =>
-      file.type.startsWith('image/') || /\.(png|jpe?g|jpeg|webp)$/i.test(file.name)
-    )
-    if (imageFiles.length === 0) {
-      toast({ title: '请选择图片', description: '支持 PNG / JPG / JPEG / WebP', variant: 'destructive' })
-      return
-    }
+  const applySlotAssignments = async (
+    assignments: Map<number, File>,
+    options?: { toastTitle?: string }
+  ) => {
+    if (assignments.size === 0) return
 
     setIsReading(true)
-    let slot = startSlot ?? pendingSlotRef.current
-    let added = 0
     const nextSlots = { ...slots }
     const nextAdjusts = { ...adjusts }
+    let added = 0
+    const errors: string[] = []
 
-    for (const file of imageFiles) {
-      if (slot > STORE_SLOT_COUNT) break
-      if (!replaceInPlace) {
-        while (slot <= STORE_SLOT_COUNT && nextSlots[slot]) {
-          slot += 1
-        }
-      }
-      if (slot > STORE_SLOT_COUNT) break
+    for (const [slotIndex, file] of [...assignments.entries()].sort((a, b) => a[0] - b[0])) {
       try {
-        await assignSource(slot, file, nextSlots)
-        nextAdjusts[slot] = { ...DEFAULT_STORE_CROP_ADJUST }
+        await assignSource(slotIndex, file, nextSlots)
+        nextAdjusts[slotIndex] = { ...DEFAULT_STORE_CROP_ADJUST }
         added += 1
-        setActiveSlot(slot)
-        slot += 1
+        setActiveSlot(slotIndex)
       } catch (error) {
         const reason = error instanceof Error ? error.message : '读取失败'
-        toast({ title: `${file.name} 读取失败`, description: reason, variant: 'destructive' })
+        errors.push(`${file.name}: ${reason}`)
       }
     }
 
@@ -274,12 +271,105 @@ export default function StoreScreenshotCropView() {
       invalidateOutputs()
       setSlots(nextSlots)
       setAdjusts(nextAdjusts)
+      const { named } = describeSlotAssignments(assignments)
       const count = Object.keys(nextSlots).length
-      toast({ title: `已更新 ${added} 张`, description: `当前 ${count}/${STORE_SLOT_COUNT} 张` })
+      toast({
+        title: options?.toastTitle || `已导入 ${added} 张`,
+        description: named > 0
+          ? `当前 ${count}/${STORE_SLOT_COUNT} 张 · ${named} 张按文件名自动对位`
+          : `当前 ${count}/${STORE_SLOT_COUNT} 张 · 按顺序填入空槽`,
+      })
+    }
+
+    if (errors.length > 0) {
+      toast({
+        title: `${errors.length} 张读取失败`,
+        description: errors.slice(0, 2).join('；'),
+        variant: 'destructive',
+      })
     }
 
     setIsReading(false)
   }
+
+  const importFiles = async (
+    files: File[],
+    options: {
+      startSlot?: number
+      replaceInPlace?: boolean
+      fillMode?: 'smart' | 'sequential'
+      clearBefore?: boolean
+      toastTitle?: string
+    } = {}
+  ) => {
+    const imageFiles = filterStoreImageFiles(files)
+    if (imageFiles.length === 0) {
+      toast({ title: '未识别到图片', description: '支持 PNG / JPG / JPEG / WebP', variant: 'destructive' })
+      return
+    }
+
+    const baseSlots = options.clearBefore ? {} : { ...slots }
+    const assignments = planStoreScreenshotSlotAssignments(imageFiles, baseSlots, {
+      startSlot: options.startSlot ?? 1,
+      replaceInPlace: options.replaceInPlace,
+      fillMode: options.fillMode ?? 'smart',
+    })
+
+    if (assignments.size === 0) {
+      toast({ title: '没有可填入的空槽', description: '五图已满，可删除后重试', variant: 'destructive' })
+      return
+    }
+
+    await applySlotAssignments(assignments, { toastTitle: options.toastTitle })
+  }
+
+  const importFilesToSlot = (slotIndex: number, files: File[]) => {
+    void importFiles(files, { startSlot: slotIndex, replaceInPlace: true, toastTitle: `已更新图${slotIndex}` })
+  }
+
+  const clearAllSlots = () => {
+    Object.values(slots).forEach(source => URL.revokeObjectURL(source.previewUrl))
+    invalidateOutputs()
+    setSlots({})
+  }
+
+  const openBatchPicker = () => {
+    if (batchFileInputRef.current) batchFileInputRef.current.value = ''
+    batchFileInputRef.current?.click()
+  }
+
+  const openFolderPicker = () => {
+    if (folderInputRef.current) folderInputRef.current.value = ''
+    folderInputRef.current?.click()
+  }
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (isReading || isGenerating) return
+      const items = event.clipboardData?.items
+      if (!items) return
+
+      const pastedFiles: File[] = []
+      for (const item of Array.from(items)) {
+        if (item.kind !== 'file') continue
+        const file = item.getAsFile()
+        if (file && (file.type.startsWith('image/') || /\.(png|jpe?g|jpeg|webp)$/i.test(file.name))) {
+          pastedFiles.push(file)
+        }
+      }
+      if (pastedFiles.length === 0) return
+
+      event.preventDefault()
+      void importFiles(pastedFiles, {
+        startSlot: activeSlot,
+        fillMode: 'smart',
+        toastTitle: `已粘贴 ${pastedFiles.length} 张`,
+      })
+    }
+
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [slots, adjusts, activeSlot, isReading, isGenerating])
 
   const removeSlot = (slotIndex: number) => {
     const target = slots[slotIndex]
@@ -505,24 +595,91 @@ export default function StoreScreenshotCropView() {
                 <Upload className="h-4 w-4 text-muted-foreground" />
                 上传五图原稿
               </CardTitle>
-              <CardDescription className="text-xs">固定 5 槽位，可逐张替换或拖拽批量填入</CardDescription>
+              <CardDescription className="text-xs">
+                支持一键选五张、文件夹导入、拖拽、粘贴；文件名 01~05 / 图1~5 自动对位
+              </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2">
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="sr-only"
+                onChange={event => {
+                  void importFilesToSlot(pendingSlotRef.current, Array.from(event.target.files || []))
+                }}
+              />
+              <input
+                ref={batchFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
                 multiple
                 className="sr-only"
                 onChange={event => {
-                  void handleFiles(Array.from(event.target.files || []), pendingSlotRef.current, true)
+                  void importFiles(Array.from(event.target.files || []), {
+                    fillMode: 'smart',
+                    toastTitle: '已批量导入',
+                  })
                 }}
               />
+              <input
+                ref={folderInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="sr-only"
+                {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                multiple
+                onChange={event => {
+                  void importFiles(Array.from(event.target.files || []), {
+                    fillMode: 'smart',
+                    toastTitle: '已从文件夹导入',
+                  })
+                }}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  className="h-9 text-xs rounded-lg col-span-2 bg-foreground text-background hover:bg-foreground/90"
+                  disabled={isReading}
+                  onClick={openBatchPicker}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  一键选择五图（可多选）
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 text-xs rounded-lg"
+                  disabled={isReading}
+                  onClick={openFolderPicker}
+                >
+                  <FolderOpen className="h-3.5 w-3.5 mr-1" />
+                  选择文件夹
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 text-xs rounded-lg"
+                  disabled={isReading || uploadedCount === 0}
+                  onClick={clearAllSlots}
+                >
+                  清空五图
+                </Button>
+              </div>
               <div
                 className={cn(
-                  'border border-dashed rounded-xl p-3 text-center text-xs transition-colors',
+                  'border border-dashed rounded-xl p-3 text-center text-xs transition-colors cursor-pointer',
                   isDragging ? 'border-foreground bg-muted/50' : 'border-border hover:bg-muted/30'
                 )}
+                role="button"
+                tabIndex={0}
+                onClick={openBatchPicker}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    openBatchPicker()
+                  }
+                }}
                 onDragEnter={e => { e.preventDefault(); dragCounterRef.current += 1; setIsDragging(true) }}
                 onDragLeave={e => {
                   e.preventDefault()
@@ -534,13 +691,16 @@ export default function StoreScreenshotCropView() {
                   e.preventDefault()
                   dragCounterRef.current = 0
                   setIsDragging(false)
-                  void handleFiles(Array.from(e.dataTransfer.files || []), 1)
+                  void importFiles(Array.from(e.dataTransfer.files || []), { fillMode: 'smart' })
                 }}
               >
                 {isReading ? (
                   <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />读取中</span>
                 ) : (
-                  <span className="text-muted-foreground">拖入最多 5 张图，按槽位顺序填入</span>
+                  <span className="text-muted-foreground flex flex-col gap-1">
+                    <span>拖入图片到此处，或 Ctrl+V 粘贴</span>
+                    <span className="text-[10px]">01.png、图2.jpg 等会自动填入对应槽位</span>
+                  </span>
                 )}
               </div>
 
@@ -552,8 +712,19 @@ export default function StoreScreenshotCropView() {
                     key={meta.index}
                     className={cn(
                       'flex items-center gap-2 rounded-lg border p-2 transition-colors',
-                      isActive ? 'border-foreground bg-muted/40' : 'border-border/80'
+                      isActive ? 'border-foreground bg-muted/40' : 'border-border/80 hover:border-foreground/30'
                     )}
+                    onDragOver={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.dataTransfer.dropEffect = 'copy'
+                    }}
+                    onDrop={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      slotDragCounterRef.current = 0
+                      void importFilesToSlot(meta.index, Array.from(e.dataTransfer.files || []))
+                    }}
                   >
                     {source ? (
                       <img src={source.previewUrl} alt="" className="h-12 w-8 rounded object-cover border shrink-0" />
