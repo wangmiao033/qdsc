@@ -168,6 +168,38 @@ function sanitizeName(name: string) {
   return name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'banner'
 }
 
+function sortSizeLabel(a: string, b: string) {
+  const [aw, ah] = a.split('x').map(Number)
+  const [bw, bh] = b.split('x').map(Number)
+  return aw - bw || ah - bh
+}
+
+function buildBannerZipFileName(outputs: BannerOutput[]) {
+  if (outputs.length === 0) return 'banner_crop.zip'
+
+  const uniqueSizes = [...new Set(outputs.map(output => `${output.width}x${output.height}`))]
+    .sort(sortSizeLabel)
+  const uniqueSources = [...new Set(outputs.map(output => output.sourceBaseName))]
+  const prefix = uniqueSources.length === 1 ? sanitizeName(uniqueSources[0]) : 'banner_crop'
+  const masterMatch = outputs[0]?.masterGroup.match(/\d+x\d+/)
+  const masterTag = masterMatch?.[0]
+
+  let sizeTag: string
+  if (uniqueSizes.length <= 5) {
+    sizeTag = uniqueSizes.join('+')
+  } else if (masterTag) {
+    sizeTag = `${masterTag}_${uniqueSizes.length}sizes`
+  } else {
+    sizeTag = `${uniqueSizes[0]}_to_${uniqueSizes[uniqueSizes.length - 1]}_${uniqueSizes.length}sizes`
+  }
+
+  let fileName = `${prefix}_${sizeTag}_${outputs.length}files.zip`
+  if (fileName.length > 220) {
+    fileName = `${prefix}_${uniqueSizes.length}sizes_${outputs.length}files.zip`
+  }
+  return fileName
+}
+
 function getMimeType(format: OutputFormat) {
   if (format === 'png') return 'image/png'
   if (format === 'webp') return 'image/webp'
@@ -849,7 +881,7 @@ export default function BannerCropView() {
     const zip = new JSZip()
     outputs.forEach(output => zip.file(output.path, output.blob))
     const blob = await zip.generateAsync({ type: 'blob' })
-    saveAs(blob, `banner_crop_${outputs.length}_files.zip`)
+    saveAs(blob, buildBannerZipFileName(outputs))
   }
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
