@@ -447,30 +447,28 @@ export default function BannerCropView() {
   }, [outputScope, activeMasterGroupSizes, activeMasterGroup, selectedSizeList])
   const sourcePlanById = useMemo(() => new Map(sourcePlans.map(plan => [plan.source.id, plan])), [sourcePlans])
 
+  const uploadedSource = sources[0]
+  const uploadedGroup = uploadedSource ? findBestMasterGroup(uploadedSource) : null
+
   const getMasterSourceForGroup = (group: MasterGroup) => {
-    const groupSources = sources.filter(source => findBestMasterGroup(source).id === group.id)
-    return groupSources.find(source => `${source.width}x${source.height}` === group.master) || groupSources[0]
+    if (!uploadedSource || !uploadedGroup || uploadedGroup.id !== group.id) return undefined
+    return uploadedSource
   }
 
   const generationPlans = useMemo(() => {
-    if (sources.length === 0) return []
+    if (!uploadedSource || !uploadedGroup) return []
 
     if (outputScope === 'autoMaster') {
-      return MASTER_GROUPS.flatMap(group => {
-        const sizes = getGroupSizes(group)
-        if (sizes.length === 0) return []
-        const source = getMasterSourceForGroup(group)
-        if (!source) return []
-        return [{ source, group, sizes }]
-      })
+      const sizes = getGroupSizes(uploadedGroup)
+      if (sizes.length === 0) return []
+      return [{ source: uploadedSource, group: uploadedGroup, sizes }]
     }
 
     const sizes = activeSizeList
     if (sizes.length === 0) return []
-    const source = getMasterSourceForGroup(activeMasterGroup)
-    if (!source) return []
-    return [{ source, group: activeMasterGroup, sizes }]
-  }, [sources, outputScope, activeMasterGroup, activeSizeList, sizeByKey])
+    if (uploadedGroup.id !== activeMasterGroup.id) return []
+    return [{ source: uploadedSource, group: activeMasterGroup, sizes }]
+  }, [uploadedSource, uploadedGroup, outputScope, activeMasterGroup, activeSizeList, sizeByKey])
 
   const scopeSizes = useMemo(() => activeMasterGroupSizes, [activeMasterGroupSizes])
 
@@ -490,15 +488,12 @@ export default function BannerCropView() {
     [generationPlans]
   )
   const missingMasterGroups = useMemo(() => {
-    if (sources.length === 0) return []
+    if (!uploadedSource) return []
     if (outputScope === 'autoMaster') {
-      return MASTER_GROUPS.filter(group => getGroupSizes(group).length > 0 && !getMasterSourceForGroup(group))
+      return uploadedGroup ? [] : [MASTER_GROUPS[0]]
     }
-    return getMasterSourceForGroup(activeMasterGroup) ? [] : [activeMasterGroup]
-  }, [sources, outputScope, activeMasterGroup, sizeByKey])
-  const hasMixedMasterGroups = outputScope === 'autoMaster'
-    && sources.length > 1
-    && new Set(sourcePlans.map(plan => plan.group.id)).size > 1
+    return uploadedGroup?.id === activeMasterGroup.id ? [] : [activeMasterGroup]
+  }, [uploadedSource, uploadedGroup, outputScope, activeMasterGroup])
   const totalSourceSize = sources.reduce((sum, source) => sum + source.size, 0)
   const totalOutputSize = outputs.reduce((sum, output) => sum + output.blob.size, 0)
 
@@ -567,7 +562,7 @@ export default function BannerCropView() {
     setProgress(0)
   }
 
-  const addFiles = async (fileList: FileList | File[] | null | undefined) => {
+  const addSingleSource = async (fileList: FileList | File[] | null | undefined) => {
     if (!fileList || fileList.length === 0) return
 
     const imageFiles = Array.from(fileList).filter(file =>
@@ -580,34 +575,36 @@ export default function BannerCropView() {
       return
     }
 
+    if (imageFiles.length > 1) {
+      toast({
+        title: '每次仅支持 1 张母版原图',
+        description: '已自动使用第一张，请按母版比例逐张上传',
+      })
+    }
+
+    const file = imageFiles[0]
+    const isReplacing = sources.length > 0
+
     setIsReading(true)
     clearOutputs()
-    const nextSources: BannerSource[] = []
-    const skipped: Array<{ name: string; reason: string }> = []
 
     try {
-      for (const file of imageFiles) {
-        try {
-          nextSources.push(await readSource(file))
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : '图片读取失败'
-          skipped.push({ name: file.name, reason })
-          console.warn('[BannerCrop] skipped source image', { fileName: file.name, reason })
-        }
-      }
+      const nextSource = await readSource(file)
+      sources.forEach(source => URL.revokeObjectURL(source.previewUrl))
 
-      if (nextSources.length > 0) {
-        setSources(prev => [...prev, ...nextSources])
-        const latest = nextSources[nextSources.length - 1]
-        const matchedGroup = findBestMasterGroup(latest)
-        setOutputScope('autoMaster')
-        setActiveMasterGroupId(matchedGroup.id)
-        setSelectedSizes(new Set(matchedGroup.sizes))
-        toast({ title: `已添加 ${nextSources.length} 张 Banner 原图` })
-      }
-      if (skipped.length > 0) {
-        toast({ title: `跳过 ${skipped.length} 个文件`, description: skipped[0].reason, variant: 'destructive' })
-      }
+      const matchedGroup = findBestMasterGroup(nextSource)
+      setSources([nextSource])
+      setOutputScope('autoMaster')
+      setActiveMasterGroupId(matchedGroup.id)
+      setSelectedSizes(new Set(matchedGroup.sizes))
+
+      toast({
+        title: isReplacing ? '已替换母版原图' : '已上传母版原图',
+        description: `匹配至 ${matchedGroup.label}（${nextSource.width}×${nextSource.height}）`,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '图片读取失败'
+      toast({ title: '图片读取失败', description: reason, variant: 'destructive' })
     } finally {
       setIsReading(false)
       resetFileInput()
@@ -769,10 +766,10 @@ export default function BannerCropView() {
     if (plans.length === 0 || totalOutputCount === 0) {
       const missingLabels = missingMasterGroups.map(group => group.label)
       toast({
-        title: '缺少母版图',
+        title: '无法生成',
         description: missingLabels.length > 0
-          ? `请先上传对应母版：${missingLabels.slice(0, 3).join('、')}${missingLabels.length > 3 ? ` 等 ${missingLabels.length} 类` : ''}`
-          : '请先上传与当前分类匹配的母版原图',
+          ? `当前原图不匹配「${missingLabels[0]}」，请上传对应比例母版或点击「自动匹配」`
+          : '请先上传 1 张母版原图',
         variant: 'destructive',
       })
       return
@@ -889,7 +886,7 @@ export default function BannerCropView() {
     setIsDragging(false)
     const files = getFilesFromDataTransfer(event.dataTransfer)
     if (files.length > 0) {
-      void addFiles(files)
+      void addSingleSource(files)
     } else {
       toast({ title: '未识别到图片', description: '请拖入 PNG/JPG/WebP/GIF/BMP 文件', variant: 'destructive' })
     }
@@ -910,7 +907,7 @@ export default function BannerCropView() {
             <Crop className="h-5 w-5 text-foreground" />
             Banner 裁剪
           </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">按渠道 Banner 尺寸批量裁切输出</p>
+          <p className="text-sm text-muted-foreground mt-0.5">每次上传 1 张母版原图，自动匹配分类后批量裁切</p>
         </div>
         <Button
           variant="outline"
@@ -930,8 +927,9 @@ export default function BannerCropView() {
             <CardHeader className="px-4 pt-4 pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Upload className="h-4 w-4 text-muted-foreground" />
-                上传原图
+                上传母版原图
               </CardTitle>
+              <CardDescription className="text-xs">仅 1 张，按宽高比自动匹配母版分类</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div
@@ -940,7 +938,7 @@ export default function BannerCropView() {
                   isDragging
                     ? 'border-foreground bg-muted/50'
                     : 'border-border hover:border-foreground/40 hover:bg-muted/30',
-                  isReading ? 'pointer-events-none opacity-70' : 'cursor-pointer'
+                  isReading ? 'opacity-70' : 'cursor-pointer'
                 )}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
@@ -955,16 +953,15 @@ export default function BannerCropView() {
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label="上传 Banner 原图，支持点击或拖入"
+                aria-label="上传母版原图，每次一张，支持点击或拖入"
               >
                 <input
                   ref={inputRef}
                   type="file"
-                  multiple
                   accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
                   className="sr-only"
                   onChange={event => {
-                    void addFiles(event.target.files)
+                    void addSingleSource(event.target.files)
                   }}
                 />
                 <div className="pointer-events-none">
@@ -976,14 +973,14 @@ export default function BannerCropView() {
                   ) : sources.length > 0 ? (
                     <>
                       <ImagePlus className="h-7 w-7 mx-auto text-foreground/70" />
-                      <div className="text-sm font-medium mt-2">已选择 {sources.length} 张原图</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">点击或拖入继续添加</div>
+                      <div className="text-sm font-medium mt-2">已上传 1 张母版原图</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">点击或拖入可替换</div>
                     </>
                   ) : (
                     <>
                       <Upload className="h-7 w-7 mx-auto text-muted-foreground" />
-                      <div className="text-sm font-medium mt-2">拖入 Banner 原图或点击选择</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP · 支持多选</div>
+                      <div className="text-sm font-medium mt-2">拖入 1 张母版原图</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP</div>
                     </>
                   )}
                 </div>
@@ -999,16 +996,16 @@ export default function BannerCropView() {
                     openFilePicker()
                   }}
                 >
-                  <ImagePlus className="h-3.5 w-3.5 mr-1" />
-                  继续添加原图
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                  替换原图
                 </Button>
               )}
 
               {sources.length > 0 && (
                 <div className="flex items-stretch divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
                   <div className="flex-1 py-2 px-1">
-                    <div className="text-base font-semibold tabular-nums">{sources.length}</div>
-                    <div className="text-[10px] text-muted-foreground">原图</div>
+                    <div className="text-base font-semibold tabular-nums">1</div>
+                    <div className="text-[10px] text-muted-foreground">母版原图</div>
                   </div>
                   <div className="flex-1 py-2 px-1">
                     <div className="text-base font-semibold tabular-nums">{activeSizeList.length}</div>
@@ -1121,8 +1118,16 @@ export default function BannerCropView() {
                     <span className="text-xs font-normal text-muted-foreground">共 {MASTER_GROUPS.length} 类</span>
                   </CardTitle>
                   <CardDescription className="text-xs leading-relaxed">
-                    当前：<span className="font-medium text-foreground">{activeMasterGroup.label}</span>
-                    {hasMixedMasterGroups && ' · 多原图将按各自母版分别输出'}
+                    {uploadedGroup ? (
+                      <>
+                        已匹配：<span className="font-medium text-foreground">{uploadedGroup.label}</span>
+                        {uploadedSource && (
+                          <span className="text-muted-foreground"> · 原图 {uploadedSource.width}×{uploadedSource.height}</span>
+                        )}
+                      </>
+                    ) : (
+                      <>当前浏览：<span className="font-medium text-foreground">{activeMasterGroup.label}</span></>
+                    )}
                   </CardDescription>
                 </div>
                 <Button
@@ -1143,7 +1148,7 @@ export default function BannerCropView() {
                 {MASTER_GROUPS.map(group => {
                   const groupSizes = getGroupSizes(group)
                   const ratio = getMasterRatio(group)
-                  const hasMaster = Boolean(getMasterSourceForGroup(group))
+                  const hasMaster = uploadedGroup?.id === group.id
                   const isSelected = activeMasterGroupId === group.id
                   return (
                     <button
