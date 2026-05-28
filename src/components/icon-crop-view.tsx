@@ -79,6 +79,7 @@ const APP_ICON_SIZES: SizeOption[] = [
 const GAME_CHANNEL_SIZES: SizeOption[] = [
   { label: '512x512', width: 512, height: 512, group: '游戏渠道' },
   { label: '256x256', width: 256, height: 256, group: '游戏渠道' },
+  { label: '201x201', width: 201, height: 201, group: '游戏渠道' },
   { label: '200x200', width: 200, height: 200, group: '游戏渠道' },
   { label: '180x180', width: 180, height: 180, group: '游戏渠道' },
   { label: '167x167', width: 167, height: 167, group: '游戏渠道' },
