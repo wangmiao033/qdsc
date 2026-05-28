@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Crop, PlusCircle, Minus, Move, Maximize2, Upload, X, Download, FileDown,
   RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2, Eye, Palette,
-  Layers, Database, Loader2, Check, Sparkles, CornerDownRight
+  Layers, Database, Loader2, Check, Sparkles, CornerDownRight, AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,6 +86,7 @@ const GAME_CHANNEL_SIZES: SizeOption[] = [
   { label: '152x152', width: 152, height: 152, group: '游戏渠道' },
   { label: '144x144', width: 144, height: 144, group: '游戏渠道' },
   { label: '128x128', width: 128, height: 128, group: '游戏渠道' },
+  { label: '130x130', width: 130, height: 130, group: '游戏渠道' },
   { label: '120x120', width: 120, height: 120, group: '游戏渠道' },
   { label: '108x108', width: 108, height: 108, group: '游戏渠道' },
   { label: '96x96', width: 96, height: 96, group: '游戏渠道' },
@@ -307,6 +308,22 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+interface OversizeOutputEntry {
+  label: string
+  bytes: number
+}
+
+function recordOversize(
+  blob: Blob,
+  label: string,
+  maxBytes: number,
+  oversize: OversizeOutputEntry[]
+) {
+  if (blob.size > maxBytes) {
+    oversize.push({ label, bytes: blob.size })
+  }
+}
+
 function getBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '')
 }
@@ -511,6 +528,9 @@ export default function IconCropView() {
   // Output settings
   const [outputFormat, setOutputFormat] = useState('image/png')
   const [outputQuality, setOutputQuality] = useState(0.92)
+  const [enableMaxFileSize, setEnableMaxFileSize] = useState(true)
+  const [maxFileSizeKb, setMaxFileSizeKb] = useState(600)
+  const [lastOversizeOutputs, setLastOversizeOutputs] = useState<OversizeOutputEntry[]>([])
   const [scaleMode, setScaleMode] = useState<ScaleMode>('contain')
   const [bgColor, setBgColor] = useState('transparent')
   const [enableRoundedCorners, setEnableRoundedCorners] = useState(false)
@@ -810,9 +830,12 @@ export default function IconCropView() {
     }
 
     setGenerating(true)
+    setLastOversizeOutputs([])
     const totalOps = outputPlan.entries.length
     setProgressTotal(totalOps)
     setProgress(0)
+    const maxBytes = enableMaxFileSize ? maxFileSizeKb * 1024 : Infinity
+    const oversize: OversizeOutputEntry[] = []
 
     try {
       if (outputPlan.duplicates.length > 0) {
@@ -833,8 +856,19 @@ export default function IconCropView() {
         const blob = await resizeImage(processedCanvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
         const ext = getFormatExt(outputFormat)
         const baseName = getBaseName(f.name)
-        saveAs(blob, `${baseName}_${s.width}x${s.height}.${ext}`)
-        toast({ title: '下载完成' })
+        const outName = `${baseName}_${s.width}x${s.height}.${ext}`
+        recordOversize(blob, outName, maxBytes, oversize)
+        saveAs(blob, outName)
+        if (oversize.length > 0) {
+          setLastOversizeOutputs(oversize)
+          toast({
+            title: `文件超过 ${maxFileSizeKb} KB 限制`,
+            description: `${outName}（${formatFileSize(blob.size)}）。可改用 JPG/WebP 降低质量，或在「格式转换」再压`,
+            variant: 'destructive',
+          })
+        } else {
+          toast({ title: '下载完成' })
+        }
       } else {
         const zip = new JSZip()
         let done = 0
@@ -849,6 +883,7 @@ export default function IconCropView() {
               canvas = applyRoundedCorners(canvas, cornerRadius * Math.min(s.width, s.height) / 100)
             }
             const blob = await resizeImage(canvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
+            recordOversize(blob, path, maxBytes, oversize)
             zip.file(path, blob)
             done++
             setProgress(done)
@@ -856,7 +891,20 @@ export default function IconCropView() {
         }
         const zipBlob = await zip.generateAsync({ type: 'blob' })
         saveAs(zipBlob, `icon_crop_${Date.now()}.zip`)
-        toast({ title: `已生成 ${done} 个文件并打包下载` })
+        if (oversize.length > 0) {
+          setLastOversizeOutputs(oversize)
+          const preview = oversize
+            .slice(0, 3)
+            .map(o => `${o.label} ${formatFileSize(o.bytes)}`)
+            .join('、')
+          toast({
+            title: `${oversize.length} 个文件超过 ${maxFileSizeKb} KB 限制`,
+            description: `${preview}${oversize.length > 3 ? ' 等' : ''}。ZIP 已下载，可改用 JPG/WebP 或「格式转换」再压`,
+            variant: 'destructive',
+          })
+        } else {
+          toast({ title: `已生成 ${done} 个文件并打包下载` })
+        }
       }
     } catch (err) {
       toast({ title: '生成失败', description: String(err), variant: 'destructive' })
@@ -864,7 +912,7 @@ export default function IconCropView() {
     setGenerating(false)
     setProgress(0)
     setProgressTotal(0)
-  }, [files, selectedFileIds, selectedSizes, allSizes, getProcessedCanvas, enableRoundedCorners, cornerRadius, scaleMode, outputFormat, outputQuality, bgColor, zipStructure, toast])
+  }, [files, selectedFileIds, selectedSizes, allSizes, getProcessedCanvas, enableRoundedCorners, cornerRadius, scaleMode, outputFormat, outputQuality, bgColor, zipStructure, enableMaxFileSize, maxFileSizeKb, toast])
 
   const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
   const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
@@ -1238,6 +1286,54 @@ export default function IconCropView() {
 
                 <Separator />
 
+                {/* File size limit */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">单文件大小限制</Label>
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0">渠道上传</Badge>
+                    </div>
+                    <Switch checked={enableMaxFileSize} onCheckedChange={setEnableMaxFileSize} />
+                  </div>
+                  {enableMaxFileSize && (
+                    <div className="space-y-1.5 pl-2 border-l-2 border-primary/20 ml-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10240}
+                          className="h-7 text-xs w-24"
+                          value={maxFileSizeKb}
+                          onChange={e => {
+                            const v = parseInt(e.target.value, 10)
+                            if (!Number.isNaN(v)) setMaxFileSizeKb(Math.min(10240, Math.max(1, v)))
+                          }}
+                        />
+                        <span className="text-xs text-muted-foreground">KB 以内</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {[600, 200, 100].map(kb => (
+                          <Button
+                            key={kb}
+                            type="button"
+                            variant={maxFileSizeKb === kb ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-6 text-[10px] px-2"
+                            onClick={() => setMaxFileSizeKb(kb)}
+                          >
+                            {kb} KB
+                          </Button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        生成后自动检查每个输出文件；超标会警告，不阻断下载。PNG 无质量滑块时可在「格式转换」再压。
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
                 {/* ZIP structure */}
                 <div className="space-y-1.5">
                   <Label className="text-xs">ZIP 打包方式</Label>
@@ -1404,6 +1500,21 @@ export default function IconCropView() {
                     </>
                   )}
                 </Button>
+                {lastOversizeOutputs.length > 0 && enableMaxFileSize && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      上次生成 {lastOversizeOutputs.length} 个文件超过 {maxFileSizeKb} KB
+                    </div>
+                    <ul className="text-[10px] text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                      {lastOversizeOutputs.map(o => (
+                        <li key={o.label} className="font-mono truncate">
+                          {o.label} · {formatFileSize(o.bytes)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
