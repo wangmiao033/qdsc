@@ -234,65 +234,85 @@ function applyRoundedCorners(
   return canvas
 }
 
-function resizeImage(
+function getSizeKey(size: SizeOption) {
+  return `${size.group}::${size.label}`
+}
+
+function resizeToCanvas(
+  sourceCanvas: HTMLCanvasElement,
+  targetWidth: number,
+  targetHeight: number,
+  mode: ScaleMode,
+  format: string,
+  bgColor: string
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = targetWidth
+  canvas.height = targetHeight
+  const ctx = canvas.getContext('2d')!
+
+  if (bgColor && bgColor !== 'transparent') {
+    ctx.fillStyle = bgColor
+    ctx.fillRect(0, 0, targetWidth, targetHeight)
+  } else if (format === 'image/png') {
+    ctx.clearRect(0, 0, targetWidth, targetHeight)
+  } else {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, targetWidth, targetHeight)
+  }
+
+  const srcW = sourceCanvas.width
+  const srcH = sourceCanvas.height
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  if (mode === 'stretch') {
+    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
+  } else if (mode === 'contain') {
+    const scale = Math.min(targetWidth / srcW, targetHeight / srcH)
+    const drawW = srcW * scale
+    const drawH = srcH * scale
+    const offsetX = (targetWidth - drawW) / 2
+    const offsetY = (targetHeight - drawH) / 2
+    ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
+  } else {
+    const scale = Math.max(targetWidth / srcW, targetHeight / srcH)
+    const drawW = srcW * scale
+    const drawH = srcH * scale
+    const offsetX = (targetWidth - drawW) / 2
+    const offsetY = (targetHeight - drawH) / 2
+    ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
+  }
+
+  return canvas
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, format: string, quality: number): Promise<Blob> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob!), format, quality)
+  })
+}
+
+/** 先缩放到目标尺寸，再按目标边长比例裁圆角，保证 130/201/512 视觉一致 */
+async function renderOutputBlob(
   sourceCanvas: HTMLCanvasElement,
   targetWidth: number,
   targetHeight: number,
   mode: ScaleMode,
   format: string,
   quality: number,
-  bgColor: string
+  bgColor: string,
+  enableRoundedCorners: boolean,
+  cornerRadiusPercent: number
 ): Promise<Blob> {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas')
-    canvas.width = targetWidth
-    canvas.height = targetHeight
-    const ctx = canvas.getContext('2d')!
-
-    // Fill background
-    if (bgColor && bgColor !== 'transparent') {
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, targetWidth, targetHeight)
-    } else if (format === 'image/png') {
-      ctx.clearRect(0, 0, targetWidth, targetHeight)
-    } else {
-      // JPG/WebP with transparent bg => fill white
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, targetWidth, targetHeight)
-    }
-
-    const srcW = sourceCanvas.width
-    const srcH = sourceCanvas.height
-
-    // Enable high-quality downscaling
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-
-    if (mode === 'stretch') {
-      ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
-    } else if (mode === 'contain') {
-      const scale = Math.min(targetWidth / srcW, targetHeight / srcH)
-      const drawW = srcW * scale
-      const drawH = srcH * scale
-      const offsetX = (targetWidth - drawW) / 2
-      const offsetY = (targetHeight - drawH) / 2
-      ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
-    } else {
-      // cover
-      const scale = Math.max(targetWidth / srcW, targetHeight / srcH)
-      const drawW = srcW * scale
-      const drawH = srcH * scale
-      const offsetX = (targetWidth - drawW) / 2
-      const offsetY = (targetHeight - drawH) / 2
-      ctx.drawImage(sourceCanvas, offsetX, offsetY, drawW, drawH)
-    }
-
-    canvas.toBlob(
-      (blob) => resolve(blob!),
-      format,
-      quality
-    )
-  })
+  const resized = resizeToCanvas(sourceCanvas, targetWidth, targetHeight, mode, format, bgColor)
+  const finalCanvas = enableRoundedCorners
+    ? applyRoundedCorners(
+        resized,
+        cornerRadiusPercent * Math.min(targetWidth, targetHeight) / 100
+      )
+    : resized
+  return canvasToBlob(finalCanvas, format, quality)
 }
 
 function getFormatExt(format: string) {
@@ -681,10 +701,11 @@ export default function IconCropView() {
     setSelectedSizes(prev => {
       const next = new Set(prev)
       const groupSizes = allSizes.filter(s => s.group === group)
-      const allSelected = groupSizes.every(s => next.has(s.label))
+      const allSelected = groupSizes.every(s => next.has(getSizeKey(s)))
       for (const s of groupSizes) {
-        if (allSelected) next.delete(s.label)
-        else next.add(s.label)
+        const key = getSizeKey(s)
+        if (allSelected) next.delete(key)
+        else next.add(key)
       }
       return next
     })
@@ -702,17 +723,24 @@ export default function IconCropView() {
       toast({ title: '该尺寸已存在', variant: 'destructive' })
       return
     }
-    setCustomSizes(prev => [...prev, { label, width: w, height: h, group: '自定义尺寸' }])
+    const newSize = { label, width: w, height: h, group: '自定义尺寸' }
+    setCustomSizes(prev => [...prev, newSize])
+    setSelectedSizes(prev => new Set(prev).add(getSizeKey(newSize)))
     setCustomWidth('')
     setCustomHeight('')
   }, [customWidth, customHeight, customSizes, toast])
 
   const removeCustomSize = useCallback((label: string) => {
-    setCustomSizes(prev => prev.filter(s => s.label !== label))
-    setSelectedSizes(prev => {
-      const next = new Set(prev)
-      next.delete(label)
-      return next
+    setCustomSizes(prev => {
+      const removed = prev.find(s => s.label === label)
+      if (removed) {
+        setSelectedSizes(sel => {
+          const next = new Set(sel)
+          next.delete(getSizeKey(removed))
+          return next
+        })
+      }
+      return prev.filter(s => s.label !== label)
     })
   }, [])
 
@@ -730,7 +758,7 @@ export default function IconCropView() {
     // Auto-select all imported sizes
     setSelectedSizes(prev => {
       const next = new Set(prev)
-      for (const s of sizes) next.add(s.label)
+      for (const s of sizes) next.add(getSizeKey(s))
       return next
     })
   }, [toast])
@@ -814,7 +842,7 @@ export default function IconCropView() {
   // Generate outputs
   const handleGenerate = useCallback(async () => {
     const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
-    const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
+    const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(getSizeKey(s)))
     const outputPlan = createOutputPlan(selectedFiles, selectedSizeOptions, outputFormat, zipStructure)
     if (selectedFiles.length === 0) {
       toast({ title: '请至少选择一张图片', variant: 'destructive' })
@@ -849,11 +877,18 @@ export default function IconCropView() {
 
       if (outputPlan.entries.length === 1) {
         const { file: f, size: s } = outputPlan.entries[0]
-        let processedCanvas = getProcessedCanvas(f)
-        if (enableRoundedCorners) {
-          processedCanvas = applyRoundedCorners(processedCanvas, cornerRadius * Math.min(s.width, s.height) / 100)
-        }
-        const blob = await resizeImage(processedCanvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
+        const processedCanvas = getProcessedCanvas(f)
+        const blob = await renderOutputBlob(
+          processedCanvas,
+          s.width,
+          s.height,
+          scaleMode,
+          outputFormat,
+          outputQuality,
+          bgColor,
+          enableRoundedCorners,
+          cornerRadius
+        )
         const ext = getFormatExt(outputFormat)
         const baseName = getBaseName(f.name)
         const outName = `${baseName}_${s.width}x${s.height}.${ext}`
@@ -878,11 +913,17 @@ export default function IconCropView() {
           const fileEntries = outputPlan.entries.filter(entry => entry.file.id === f.id)
 
           for (const { size: s, path } of fileEntries) {
-            let canvas = processedCanvas
-            if (enableRoundedCorners) {
-              canvas = applyRoundedCorners(canvas, cornerRadius * Math.min(s.width, s.height) / 100)
-            }
-            const blob = await resizeImage(canvas, s.width, s.height, scaleMode, outputFormat, outputQuality, bgColor)
+            const blob = await renderOutputBlob(
+              processedCanvas,
+              s.width,
+              s.height,
+              scaleMode,
+              outputFormat,
+              outputQuality,
+              bgColor,
+              enableRoundedCorners,
+              cornerRadius
+            )
             recordOversize(blob, path, maxBytes, oversize)
             zip.file(path, blob)
             done++
@@ -915,7 +956,7 @@ export default function IconCropView() {
   }, [files, selectedFileIds, selectedSizes, allSizes, getProcessedCanvas, enableRoundedCorners, cornerRadius, scaleMode, outputFormat, outputQuality, bgColor, zipStructure, enableMaxFileSize, maxFileSizeKb, toast])
 
   const selectedFiles = files.filter(f => selectedFileIds.has(f.id))
-  const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(s.label))
+  const selectedSizeOptions = allSizes.filter(s => selectedSizes.has(getSizeKey(s)))
   const outputPlan = createOutputPlan(selectedFiles, selectedSizeOptions, outputFormat, zipStructure)
   const totalOutput = outputPlan.entries.length
 
@@ -1234,7 +1275,7 @@ export default function IconCropView() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Label className="text-xs font-medium">圆角输出</Label>
-                      <Badge variant="secondary" className="text-[9px] px-1 py-0">App Icon</Badge>
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0">全部尺寸</Badge>
                     </div>
                     <Switch checked={enableRoundedCorners} onCheckedChange={setEnableRoundedCorners} />
                   </div>
@@ -1252,6 +1293,9 @@ export default function IconCropView() {
                         </div>
                         <span>圆形 50%</span>
                       </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        每个输出尺寸单独按边长比例裁圆角，130/201/512 等小图与大图圆角视觉一致。
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1386,16 +1430,16 @@ export default function IconCropView() {
                           className="h-5 text-[10px] px-1.5"
                           onClick={() => selectAllGroup(group)}
                         >
-                          {sizes.every(s => selectedSizes.has(s.label)) ? '取消全选' : '全选'}
+                          {sizes.every(s => selectedSizes.has(getSizeKey(s))) ? '取消全选' : '全选'}
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {sizes.map(s => (
                           <Badge
                             key={`${s.group}-${s.label}`}
-                            variant={selectedSizes.has(s.label) ? 'default' : 'outline'}
+                            variant={selectedSizes.has(getSizeKey(s)) ? 'default' : 'outline'}
                             className="cursor-pointer text-[10px] px-1.5 py-0 select-none transition-colors"
-                            onClick={() => toggleSize(s.label)}
+                            onClick={() => toggleSize(getSizeKey(s))}
                           >
                             {s.label}
                           </Badge>
@@ -1435,9 +1479,9 @@ export default function IconCropView() {
                       {customSizes.map(s => (
                         <Badge
                           key={s.label}
-                          variant={selectedSizes.has(s.label) ? 'default' : 'outline'}
+                          variant={selectedSizes.has(getSizeKey(s)) ? 'default' : 'outline'}
                           className="cursor-pointer text-[10px] px-1.5 py-0 select-none"
-                          onClick={() => toggleSize(s.label)}
+                          onClick={() => toggleSize(getSizeKey(s))}
                         >
                           {s.label}
                           <X
@@ -1614,11 +1658,18 @@ export default function IconCropView() {
                         ref={async (canvasEl) => {
                           if (!canvasEl) return
                           const f = previewFile
-                          let processedCanvas = getProcessedCanvas(f)
-                          if (enableRoundedCorners) {
-                            processedCanvas = applyRoundedCorners(processedCanvas, cornerRadius * Math.min(previewSize.width, previewSize.height) / 100)
-                          }
-                          const blob = await resizeImage(processedCanvas, previewSize.width, previewSize.height, scaleMode, outputFormat, outputQuality, bgColor)
+                          const processedCanvas = getProcessedCanvas(f)
+                          const blob = await renderOutputBlob(
+                            processedCanvas,
+                            previewSize.width,
+                            previewSize.height,
+                            scaleMode,
+                            outputFormat,
+                            outputQuality,
+                            bgColor,
+                            enableRoundedCorners,
+                            cornerRadius
+                          )
                           const url = URL.createObjectURL(blob)
                           const img = new Image()
                           img.onload = () => {
