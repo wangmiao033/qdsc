@@ -216,6 +216,28 @@ interface DashboardData {
   recentAcceptance: Array<{ id: string; fileName: string; severity: string; message: string; createdAt: string }>
 }
 
+const emptySpecsData = { items: [] as MaterialSpec[], total: 0, channels: [] as string[] }
+
+async function readJsonOrNull<T>(res: Response): Promise<T | null> {
+  if (!res.ok) return null
+  try {
+    return await res.json()
+  } catch (error) {
+    console.error('[qdsc] failed to parse JSON response', error)
+    return null
+  }
+}
+
+function normalizeSpecsData(data: unknown): typeof emptySpecsData {
+  if (!data || typeof data !== 'object') return emptySpecsData
+  const value = data as Partial<typeof emptySpecsData>
+  return {
+    items: Array.isArray(value.items) ? value.items : [],
+    total: typeof value.total === 'number' ? value.total : 0,
+    channels: Array.isArray(value.channels) ? value.channels : [],
+  }
+}
+
 // ========== Digest View ==========
 function DigestView() {
   const [result, setResult] = useState<DigestResult | null>(null)
@@ -665,33 +687,46 @@ export default function WorkflowApp() {
     items: MaterialSpec[]
     total: number
     channels: string[]
-  }>({ items: [], total: 0, channels: [] })
+  }>(emptySpecsData)
 
   useEffect(() => {
     ;(async () => {
-      const [batchRes, specRes] = await Promise.all([
-        fetch('/api/batches'),
-        fetch('/api/specs?pageSize=200'),
-      ])
-      const batchData = await batchRes.json()
-      const specData = await specRes.json()
-      setBatches(batchData)
-      if (batchData.length > 0 && !currentBatchId) {
-        setCurrentBatchId(batchData[0].id)
+      try {
+        const [batchRes, specRes] = await Promise.all([
+          fetch('/api/batches'),
+          fetch('/api/specs?pageSize=200'),
+        ])
+        const batchData = await readJsonOrNull<Batch[]>(batchRes)
+        const specData = await readJsonOrNull(specRes)
+        const safeBatches = Array.isArray(batchData) ? batchData : []
+        setBatches(safeBatches)
+        if (safeBatches.length > 0 && !currentBatchId) {
+          setCurrentBatchId(safeBatches[0].id)
+        }
+        setSpecsData(normalizeSpecsData(specData))
+      } catch (error) {
+        console.error('[qdsc] failed to load initial workflow data', error)
+        setBatches([])
+        setSpecsData(emptySpecsData)
       }
-      setSpecsData(specData)
     })()
   }, [])
 
   const refreshAll = async () => {
-    const [batchRes, specRes] = await Promise.all([
-      fetch('/api/batches'),
-      fetch('/api/specs?pageSize=200'),
-    ])
-    const batchData = await batchRes.json()
-    const specData = await specRes.json()
-    setBatches(batchData)
-    setSpecsData(specData)
+    try {
+      const [batchRes, specRes] = await Promise.all([
+        fetch('/api/batches'),
+        fetch('/api/specs?pageSize=200'),
+      ])
+      const batchData = await readJsonOrNull<Batch[]>(batchRes)
+      const specData = await readJsonOrNull(specRes)
+      setBatches(Array.isArray(batchData) ? batchData : [])
+      setSpecsData(normalizeSpecsData(specData))
+    } catch (error) {
+      console.error('[qdsc] failed to refresh workflow data', error)
+      setBatches([])
+      setSpecsData(emptySpecsData)
+    }
   }
 
   return (
@@ -1416,14 +1451,19 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
   // 加载常用渠道
   useEffect(() => {
     ;(async () => {
-      const res = await fetch('/api/settings?key=favorite_channels')
-      const data = await res.json()
-      if (data.value) {
+      try {
+        const res = await fetch('/api/settings?key=favorite_channels')
+        const data = await readJsonOrNull<{ value?: string | null }>(res)
+        if (!data?.value) return
         try {
           const list = JSON.parse(data.value)
-          setFavoriteChannels(list)
-          setFavEditValue(list.join(', '))
+          if (Array.isArray(list)) {
+            setFavoriteChannels(list)
+            setFavEditValue(list.join(', '))
+          }
         } catch {}
+      } catch (error) {
+        console.error('[qdsc] failed to load favorite channels', error)
       }
     })()
   }, [])
@@ -1463,17 +1503,26 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
       }
       // 有选中渠道时，从API获取该渠道的素材类型
       const channelsParam = selectedChannels.join(',')
-      const [typesRes, countRes] = await Promise.all([
-        fetch(`/api/specs?mode=types&channels=${encodeURIComponent(channelsParam)}`),
-        fetch(`/api/specs?mode=count&channels=${encodeURIComponent(channelsParam)}`),
-      ])
-      const typesData = await typesRes.json()
-      const countData = await countRes.json()
-      if (!cancelled) {
-        setChannelTypes(typesData.types || [])
-        setPreviewCount(countData.total || 0)
-        // 默认全选这些素材类型
-        setSelectedTypes((typesData.types || []).map((t: { name: string }) => t.name))
+      try {
+        const [typesRes, countRes] = await Promise.all([
+          fetch(`/api/specs?mode=types&channels=${encodeURIComponent(channelsParam)}`),
+          fetch(`/api/specs?mode=count&channels=${encodeURIComponent(channelsParam)}`),
+        ])
+        const typesData = await readJsonOrNull<{ types?: Array<{ name: string; count: number }> }>(typesRes)
+        const countData = await readJsonOrNull<{ total?: number }>(countRes)
+        if (!cancelled) {
+          setChannelTypes(typesData?.types || [])
+          setPreviewCount(countData?.total || 0)
+          // 默认全选这些素材类型
+          setSelectedTypes((typesData?.types || []).map((t: { name: string }) => t.name))
+        }
+      } catch (error) {
+        console.error('[qdsc] failed to load channel material types', error)
+        if (!cancelled) {
+          setChannelTypes([])
+          setPreviewCount(0)
+          setSelectedTypes([])
+        }
       }
     })()
     return () => { cancelled = true }
@@ -1528,9 +1577,14 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
 
   const fetchTasks = async () => {
     if (!batchId) return
-    const res = await fetch(`/api/tasks?batchId=${batchId}`)
-    const data = await res.json()
-    setTasks(data)
+    try {
+      const res = await fetch(`/api/tasks?batchId=${batchId}`)
+      const data = await readJsonOrNull<TaskItem[]>(res)
+      setTasks(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('[qdsc] failed to load tasks', error)
+      setTasks([])
+    }
   }
 
   useEffect(() => { fetchTasks() }, [batchId])
@@ -1649,9 +1703,14 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
       }
       // 没有类型筛选或全选时，用API count
       if (selectedChannels.length > 0) {
-        const res = await fetch(`/api/specs?mode=count&channels=${encodeURIComponent(selectedChannels.join(','))}`)
-        const data = await res.json()
-        if (!cancelled) setPreviewCount(data.total || 0)
+        try {
+          const res = await fetch(`/api/specs?mode=count&channels=${encodeURIComponent(selectedChannels.join(','))}`)
+          const data = await readJsonOrNull<{ total?: number }>(res)
+          if (!cancelled) setPreviewCount(data?.total || 0)
+        } catch (error) {
+          console.error('[qdsc] failed to refresh task preview count', error)
+          if (!cancelled) setPreviewCount(0)
+        }
       } else {
         if (!cancelled) setPreviewCount(specs.length)
       }

@@ -38,8 +38,8 @@ function resolveDatabasePath(): string {
   }
 
   if (!isVercel) {
-    // 本地开发环境：直接使用源文件
-    const dbUrl = process.env.DATABASE_URL || 'file:./db/custom.db'
+    // 本地开发环境：使用绝对路径，避免 Prisma 将 file:./db/custom.db 按 schema 目录解析到错误位置。
+    const dbUrl = sourcePath ? `file:${sourcePath}` : (process.env.DATABASE_URL || 'file:./db/custom.db')
     console.log(`[DB] Local mode, using: ${dbUrl}`)
     return dbUrl
   }
