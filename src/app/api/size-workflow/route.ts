@@ -15,20 +15,70 @@ export async function GET(req: NextRequest) {
   const channelsParam = url.searchParams.get('channels')
   const batchId = url.searchParams.get('batchId')
 
-  // Fetch all specs for the target channels
-  const allSpecs = await db.materialSpec.findMany({
-    select: {
-      id: true,
-      channel: true,
-      name: true,
-      width: true,
-      height: true,
-      format: true,
-      isRequired: true,
-      priority: true,
-      maxSize: true,
-    }
-  })
+  let batch: { id: string; gameName: string; batchName: string } | null = null
+  let taskProgress: Record<string, { total: number; completed: number; pending: number; inProgress: number }> = {}
+
+  const allSpecs = batchId
+    ? await (async () => {
+        const foundBatch = await db.batch.findUnique({
+          where: { id: batchId },
+          select: {
+            id: true,
+            gameName: true,
+            batchName: true,
+            tasks: {
+              select: {
+                id: true,
+                specChannel: true,
+                specName: true,
+                specWidth: true,
+                specHeight: true,
+                specFormat: true,
+                specIsRequired: true,
+                specMaxSize: true,
+                status: true,
+              },
+            },
+          },
+        })
+        if (!foundBatch) return []
+        batch = { id: foundBatch.id, gameName: foundBatch.gameName, batchName: foundBatch.batchName }
+        return foundBatch.tasks.map(task => {
+          const key = `${task.specWidth}x${task.specHeight}_${task.specFormat}`
+          if (!taskProgress[key]) {
+            taskProgress[key] = { total: 0, completed: 0, pending: 0, inProgress: 0 }
+          }
+          taskProgress[key].total++
+          if (task.status === '已完成') taskProgress[key].completed++
+          else if (task.status === '制作中') taskProgress[key].inProgress++
+          else taskProgress[key].pending++
+
+          return {
+            id: task.id,
+            channel: task.specChannel,
+            name: task.specName,
+            width: task.specWidth,
+            height: task.specHeight,
+            format: task.specFormat,
+            isRequired: task.specIsRequired,
+            priority: task.specIsRequired ? '高' : '普通',
+            maxSize: task.specMaxSize,
+          }
+        })
+      })()
+    : await db.materialSpec.findMany({
+        select: {
+          id: true,
+          channel: true,
+          name: true,
+          width: true,
+          height: true,
+          format: true,
+          isRequired: true,
+          priority: true,
+          maxSize: true,
+        }
+      })
 
   // Fuzzy channel matching
   let matchedDbChannels: Set<string> | null = null
@@ -171,31 +221,6 @@ export async function GET(req: NextRequest) {
     return (b.width * b.height) - (a.width * a.height)
   })
 
-  // If batchId provided, also fetch task data to show production progress
-  let taskProgress: Record<string, { total: number; completed: number; pending: number; inProgress: number }> = {}
-  if (batchId) {
-    const tasks = await db.taskItem.findMany({
-      where: { batchId },
-      select: {
-        id: true,
-        specWidth: true,
-        specHeight: true,
-        specFormat: true,
-        status: true,
-      },
-    })
-    for (const t of tasks) {
-      const key = `${t.specWidth}x${t.specHeight}_${t.specFormat}`
-      if (!taskProgress[key]) {
-        taskProgress[key] = { total: 0, completed: 0, pending: 0, inProgress: 0 }
-      }
-      taskProgress[key].total++
-      if (t.status === '已完成') taskProgress[key].completed++
-      else if (t.status === '制作中') taskProgress[key].inProgress++
-      else taskProgress[key].pending++
-    }
-  }
-
   // Summary stats
   const totalSpecs = filteredSpecs.length
   const totalChannels = [...new Set(filteredSpecs.map(s => s.channel))].length
@@ -219,6 +244,7 @@ export async function GET(req: NextRequest) {
     sizeGroups,
     dimensionGroups,
     taskProgress,
+    batch,
   })
 }
 

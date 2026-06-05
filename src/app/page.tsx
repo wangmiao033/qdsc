@@ -809,6 +809,7 @@ export default function WorkflowApp() {
         )}
         {activeTab === 'sizeWorkflow' && (
           <SizeBasedWorkflowView
+            batchId={currentBatchId}
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
           />

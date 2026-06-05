@@ -73,6 +73,7 @@ interface SizeWorkflowData {
   sizeGroups: SizeGroupItem[]
   dimensionGroups: DimensionGroup[]
   taskProgress: Record<string, TaskProgress>
+  batch?: { id: string; gameName: string; batchName: string } | null
 }
 
 // ========== Target Channel Configuration ==========
@@ -140,9 +141,11 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // ========== Component ==========
 export default function SizeBasedWorkflowView({
+  batchId,
   onBatchChange,
   onRefresh,
 }: {
+  batchId: string
   onBatchChange: (id: string) => void
   onRefresh: () => void
 }) {
@@ -165,10 +168,12 @@ export default function SizeBasedWorkflowView({
   const loadData = useCallback(async (batchId?: string) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        channels: ALL_TARGET_NAMES.join(','),
-      })
-      if (batchId) params.set('batchId', batchId)
+      const params = new URLSearchParams()
+      if (batchId) {
+        params.set('batchId', batchId)
+      } else {
+        params.set('channels', ALL_TARGET_NAMES.join(','))
+      }
       const res = await fetch(`/api/size-workflow?${params}`)
       const json = await res.json()
       setData(json)
@@ -178,7 +183,10 @@ export default function SizeBasedWorkflowView({
     setLoading(false)
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    setCreatedBatchId(batchId || '')
+    loadData(batchId || undefined)
+  }, [batchId, loadData])
 
   // Handle batch creation
   const handleCreateBatch = async () => {
@@ -210,7 +218,7 @@ export default function SizeBasedWorkflowView({
         description: `批次「${gameName} - ${batchName}」已创建，共 ${batch.tasks?.length || 0} 个任务`,
       })
       // Reload data with the new batchId to get task progress
-      await loadData(batch.id)
+        await loadData(batch.id)
       setActiveView('produce')
     } catch {
       toast({ title: '请求失败', variant: 'destructive' })
@@ -288,6 +296,20 @@ export default function SizeBasedWorkflowView({
     return { total, completed, pending, inProgress, rate, completedSizes, totalSizes }
   })()
 
+  const starterSizes = data?.sizeGroups
+    .filter(sg => {
+      const progress = data.taskProgress[sg.key]
+      if (sg.width <= 0 || sg.height <= 0) return false
+      return !progress || progress.completed < progress.total
+    })
+    .sort((a, b) => {
+      if (b.requiredCount !== a.requiredCount) return b.requiredCount - a.requiredCount
+      if (b.channels.length !== a.channels.length) return b.channels.length - a.channels.length
+      if (b.taskCount !== a.taskCount) return b.taskCount - a.taskCount
+      return (b.width * b.height) - (a.width * a.height)
+    })
+    .slice(0, 6) || []
+
   // Format file size
   const formatMaxSize = (bytes: number) => {
     if (!bytes || bytes <= 0) return '-'
@@ -333,7 +355,8 @@ export default function SizeBasedWorkflowView({
         : '📋'
       return `${i + 1}. ${status} ${sg.width}x${sg.height} ${sg.format} ${isShared ? `[${sg.channels.length}渠道共享]` : '[独立]'} → ${sg.channels.join(', ')}`
     }).join('\n')
-    navigator.clipboard.writeText(`📏 尺寸工作流 - ${ALL_TARGET_NAMES.length}个渠道\n总计: ${data.summary.totalSizes} 个尺寸, ${data.summary.totalSpecs} 条规格\n\n${text}`)
+    const scope = data.batch ? `${data.batch.gameName} - ${data.batch.batchName}` : `${ALL_TARGET_NAMES.length}个渠道`
+    navigator.clipboard.writeText(`📏 尺寸工作流 - ${scope}\n总计: ${data.summary.totalSizes} 个尺寸, ${data.summary.totalSpecs} 条规格\n\n${text}`)
     toast({ title: '已复制到剪贴板' })
   }
 
@@ -368,6 +391,11 @@ export default function SizeBasedWorkflowView({
             <span className="text-xs text-muted-foreground ml-2">
               {summary.totalSizes} 个尺寸 · 覆盖 {summary.totalSpecs} 条规格 · 节省 {summary.workSavings}% 工作量
             </span>
+            {data.batch && (
+              <Badge variant="outline" className="ml-2 h-6 text-xs">
+                当前批次：{data.batch.gameName} - {data.batch.batchName}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-1">
             {(['overview', 'produce', 'deliver'] as const).map((view, i) => {
@@ -448,6 +476,68 @@ export default function SizeBasedWorkflowView({
                 <div className="text-[10px] text-muted-foreground">目标渠道总数</div>
               </Card>
             </div>
+
+            {/* Start Here */}
+            {starterSizes.length > 0 && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardHeader className="py-3 px-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Play className="h-4 w-4 text-primary" />
+                        从这里开始做
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        先做必做多、覆盖渠道多的尺寸；每做完一个尺寸，就能推进多个渠道的任务
+                      </CardDescription>
+                    </div>
+                    <Button size="sm" className="h-7 text-xs" onClick={() => setActiveView('produce')}>
+                      去制作视图 <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 pb-3">
+                  <div className="grid md:grid-cols-3 gap-2">
+                    {starterSizes.map((sg, idx) => {
+                      const progress = data.taskProgress[sg.key]
+                      const pending = progress ? progress.pending + progress.inProgress : sg.taskCount
+                      return (
+                        <button
+                          key={sg.key}
+                          onClick={() => {
+                            setExpandedSizes(prev => new Set(prev).add(sg.key))
+                            setActiveView('produce')
+                          }}
+                          className="text-left rounded-lg border bg-card p-3 hover:border-primary/50 hover:bg-background transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                                {idx + 1}
+                              </span>
+                              <Badge className={`text-[9px] px-1.5 py-0 shrink-0 ${CATEGORY_COLORS[sg.categories[0]] || CATEGORY_COLORS['其他']}`}>
+                                {sg.categories[0]}
+                              </Badge>
+                              <span className="font-mono font-bold text-sm truncate">{sg.width}x{sg.height}</span>
+                            </div>
+                            <Badge variant="outline" className="text-[9px] shrink-0">{sg.format}</Badge>
+                          </div>
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            覆盖 <span className="font-semibold text-foreground">{sg.channels.length}</span> 个渠道 · 待处理 <span className="font-semibold text-foreground">{pending}</span> 条
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground truncate">
+                            {sg.channels.slice(0, 4).join('、')}{sg.channels.length > 4 ? ` 等${sg.channels.length}个` : ''}
+                          </div>
+                          {sg.requiredCount > 0 && (
+                            <div className="mt-2 text-[11px] text-red-600 font-medium">必做 {sg.requiredCount} 条，建议优先</div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Size Category Distribution */}
             <Card>
