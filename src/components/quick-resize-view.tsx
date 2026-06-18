@@ -153,6 +153,14 @@ function getUniqueName(name: string, usedNames: Set<string>) {
   return nextName
 }
 
+function sanitizeArchiveName(name: string) {
+  return name
+    .replace(/\.zip$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export default function QuickResizeView() {
   const [files, setFiles] = useState<SourceImage[]>([])
   const [outputs, setOutputs] = useState<ResizeOutput[]>([])
@@ -166,6 +174,7 @@ export default function QuickResizeView() {
   const [customBackground, setCustomBackground] = useState('#000000')
   const [namingMode, setNamingMode] = useState<NamingMode>('suffix')
   const [suffix, setSuffix] = useState('resize')
+  const [zipFileName, setZipFileName] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [isReading, setIsReading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -357,7 +366,8 @@ export default function QuickResizeView() {
     const zip = new JSZip()
     outputs.forEach(output => zip.file(output.name, output.blob))
     const blob = await zip.generateAsync({ type: 'blob' })
-    saveAs(blob, `quick_resize_${targetWidth}x${targetHeight}_${outputs.length}.zip`)
+    const archiveName = sanitizeArchiveName(zipFileName) || `quick_resize_${targetWidth}x${targetHeight}_${outputs.length}files`
+    saveAs(blob, `${archiveName}.zip`)
   }
 
   const applyPreset = (preset: string) => {
@@ -632,6 +642,19 @@ export default function QuickResizeView() {
                       clearOutputs()
                     }}
                   />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">ZIP 压缩包名称</Label>
+                <Input
+                  className="h-9 text-xs"
+                  value={zipFileName}
+                  onChange={event => setZipFileName(event.target.value)}
+                  placeholder={`quick_resize_${targetWidth}x${targetHeight}_${outputs.length || files.length || 0}files`}
+                />
+                <div className="text-[10px] text-muted-foreground">
+                  不用写 .zip；为空时自动按尺寸和文件数命名
                 </div>
               </div>
 
