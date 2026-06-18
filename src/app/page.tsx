@@ -36,6 +36,7 @@ import IconCropView from '@/components/icon-crop-view'
 import BannerCropView from '@/components/banner-crop-view'
 import StoreScreenshotCropView from '@/components/store-screenshot-crop-view'
 import ImageFormatConverterView from '@/components/image-format-converter-view'
+import QuickResizeView from '@/components/quick-resize-view'
 import ProductionBoardView from '@/components/production-board-view'
 import SizeBasedWorkflowView from '@/components/size-based-workflow-view'
 
@@ -754,6 +755,7 @@ export default function WorkflowApp() {
             { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
             { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
             { id: 'storeScreenshot', label: '商店五图母版裁剪', icon: Smartphone },
+            { id: 'quickResize', label: '快速改图', icon: Zap },
             { id: 'imageConvert', label: '格式转换', icon: FileDown },
           ].map(item => (
             <button
@@ -846,6 +848,9 @@ export default function WorkflowApp() {
         )}
         {activeTab === 'storeScreenshot' && (
           <StoreScreenshotCropView />
+        )}
+        {activeTab === 'quickResize' && (
+          <QuickResizeView />
         )}
         {activeTab === 'imageConvert' && (
           <ImageFormatConverterView />
