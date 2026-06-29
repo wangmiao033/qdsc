@@ -43,11 +43,15 @@ export function findBestStoreMasterForSource(width: number, height: number): Sto
   if (width === 640 && height === 960) return getStoreMasterByKey('640x960')
 
   const sourceRatio = width / height
-  return STORE_SCREENSHOT_MASTERS.reduce((best, group) => {
+  const sourceOrientation = width >= height ? 'landscape' : 'portrait'
+  const candidates = STORE_SCREENSHOT_MASTERS.filter(group => group.orientation === sourceOrientation)
+  const scopedMasters = candidates.length > 0 ? candidates : STORE_SCREENSHOT_MASTERS
+
+  return scopedMasters.reduce((best, group) => {
     const bestDiff = Math.abs(sourceRatio - getStoreMasterRatio(best))
     const groupDiff = Math.abs(sourceRatio - getStoreMasterRatio(group))
     return groupDiff < bestDiff ? group : best
-  }, STORE_SCREENSHOT_MASTERS[0])
+  }, scopedMasters[0])
 }
 
 export function formatStoreMasterLabel(master: StoreScreenshotMaster) {

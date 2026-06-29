@@ -58,8 +58,11 @@ export const STORE_OUTPUT_SIZES: StoreOutputSize[] = [
   { key: '720x1280', width: 720, height: 1280 },
   { key: '750x1250', width: 750, height: 1250 },
   { key: '750x1350', width: 750, height: 1350 },
+  { key: '900x1600', width: 900, height: 1600 },
   { key: '960x1600', width: 960, height: 1600 },
   { key: '1080x1920', width: 1080, height: 1920 },
+  { key: '1080x2064', width: 1080, height: 2064 },
+  { key: '1140x1501', width: 1140, height: 1501 },
 ]
 
 export const STORE_SCREENSHOT_MASTERS: StoreScreenshotMaster[] = [
@@ -94,6 +97,14 @@ export const STORE_SCREENSHOT_MASTERS: StoreScreenshotMaster[] = [
     ratioLabel: '输出 480x835 / 750x1350',
     label: '特殊竖图母版',
     sizes: ['480x835', '750x1350'],
+  },
+  {
+    code: 'M4',
+    master: '1080x2160',
+    orientation: 'portrait',
+    ratioLabel: '输出 1080x2064 / 1140x1501 / 1080x1920 / 900x1600',
+    label: 'M4 竖版开屏/KV母版',
+    sizes: ['1080x2064', '1140x1501', '1080x1920', '900x1600'],
   },
   {
     code: '05',

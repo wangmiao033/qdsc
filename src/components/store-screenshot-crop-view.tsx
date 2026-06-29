@@ -252,6 +252,12 @@ export default function StoreScreenshotCropView() {
     return source
   }
 
+  const getReferenceSourceFromSlots = (slotMap: Record<number, StoreScreenshotSource>) => {
+    return slotMap[1]
+      || Object.values(slotMap).sort((a, b) => a.slotIndex - b.slotIndex)[0]
+      || null
+  }
+
   const applySlotAssignments = async (
     assignments: Map<number, File>,
     options?: { toastTitle?: string }
@@ -278,15 +284,28 @@ export default function StoreScreenshotCropView() {
 
     if (added > 0) {
       invalidateOutputs()
+      const nextReferenceSource = getReferenceSourceFromSlots(nextSlots)
+      const nextMatchedMaster = nextReferenceSource
+        ? findBestStoreMasterForSource(nextReferenceSource.width, nextReferenceSource.height)
+        : null
+
       setSlots(nextSlots)
       setAdjusts(nextAdjusts)
+      setMasterScope('auto')
+      if (nextMatchedMaster) {
+        setActiveMasterKey(nextMatchedMaster.master)
+        if (nextMatchedMaster.sizes[0]) setActiveSizeKey(nextMatchedMaster.sizes[0])
+      }
       const { named } = describeSlotAssignments(assignments)
       const count = Object.keys(nextSlots).length
       toast({
         title: options?.toastTitle || `已导入 ${added} 张`,
-        description: named > 0
-          ? `当前 ${count}/${STORE_SLOT_COUNT} 张 · ${named} 张按文件名自动对位`
-          : `当前 ${count}/${STORE_SLOT_COUNT} 张 · 按顺序填入空槽`,
+        description: [
+          named > 0
+            ? `当前 ${count}/${STORE_SLOT_COUNT} 张 · ${named} 张按文件名自动对位`
+            : `当前 ${count}/${STORE_SLOT_COUNT} 张 · 按顺序填入空槽`,
+          nextMatchedMaster ? `已自动匹配 ${nextMatchedMaster.label}` : null,
+        ].filter(Boolean).join(' · '),
       })
     }
 
@@ -426,6 +445,10 @@ export default function StoreScreenshotCropView() {
   const enableAutoMaster = () => {
     invalidateOutputs()
     setMasterScope('auto')
+    if (autoMatchedMaster) {
+      setActiveMasterKey(autoMatchedMaster.master)
+      if (autoMatchedMaster.sizes[0]) setActiveSizeKey(autoMatchedMaster.sizes[0])
+    }
     toast({ title: '已切换为自动匹配', description: '根据图1（玩法亮点）尺寸识别 Store 母版' })
   }
 
