@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check, CheckCircle2, Crop, Database, Download, FileArchive, ImagePlus, Loader2, RefreshCw,
-  Search, Settings2, Upload, X
+  Search, Settings2, Upload, Wand2, X
 } from 'lucide-react'
 import { parseStoredOutputFormat } from '@/lib/crop-utils'
 import {
@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 
 type OutputFormat = 'jpg' | 'png' | 'webp'
@@ -228,6 +229,51 @@ function isSizeInFilter(size: BannerSize, filter: SizeFilter) {
   return true
 }
 
+const QUICK_BANNER_DEMAND_SIZES = [
+  '2100x1180',
+  '1920x900',
+  '1242x699',
+  '1200x700',
+  '984x654',
+]
+
+function buildBannerSize(width: number, height: number): BannerSize {
+  const key = `${width}x${height}`
+  return { key, width, height, label: key }
+}
+
+function parseBannerSizeText(text: string): BannerSize[] {
+  const seen = new Set<string>()
+  const sizes: BannerSize[] = []
+  const matches = text.matchAll(/(\d{2,5})\s*[xX*×]\s*(\d{2,5})/g)
+
+  for (const match of matches) {
+    const width = Number(match[1])
+    const height = Number(match[2])
+    if (!width || !height) continue
+    const key = `${width}x${height}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    sizes.push(buildBannerSize(width, height))
+  }
+
+  return sizes
+}
+
+function groupBannerSizesByMaster(sizes: BannerSize[]) {
+  const map = new Map<string, { group: MasterGroup; sizes: BannerSize[] }>()
+  for (const size of sizes) {
+    const group = findMasterGroupForTargetSize(size.width, size.height)
+    const current = map.get(group.id)
+    if (current) {
+      current.sizes.push(size)
+    } else {
+      map.set(group.id, { group, sizes: [size] })
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.group.code.localeCompare(b.group.code, 'zh-CN', { numeric: true }))
+}
+
 function BannerSpecImportButton({ onImport }: { onImport: (sizes: BannerSize[]) => void }) {
   const [open, setOpen] = useState(false)
   const [channels, setChannels] = useState<string[]>([])
@@ -380,6 +426,8 @@ export default function BannerCropView() {
   const [sizeFilter, setSizeFilter] = useState<SizeFilter>('all')
   const [sizeSearch, setSizeSearch] = useState('')
   const [customSize, setCustomSize] = useState('')
+  const [smartSizeText, setSmartSizeText] = useState(QUICK_BANNER_DEMAND_SIZES.join('\n'))
+  const [smartSizes, setSmartSizes] = useState<BannerSize[]>(() => parseBannerSizeText(QUICK_BANNER_DEMAND_SIZES.join('\n')))
   const [extraSizes, setExtraSizes] = useState<BannerSize[]>([])
   const [cropMode, setCropMode] = useState<CropMode>('cover')
   const [focalPoint, setFocalPoint] = useState<FocalPoint>('center')
@@ -425,6 +473,8 @@ export default function BannerCropView() {
     () => allSizes.filter(size => selectedSizes.has(size.key)),
     [allSizes, selectedSizes]
   )
+
+  const smartMasterGroups = useMemo(() => groupBannerSizesByMaster(smartSizes), [smartSizes])
 
   const sizeByKey = useMemo(() => new Map(allSizes.map(size => [size.key, size])), [allSizes])
   const getGroupSizes = (group: MasterGroup) => group.sizes
@@ -677,6 +727,62 @@ export default function BannerCropView() {
     setOutputScope('manual')
     setSelectedSizes(prev => new Set(prev).add(key))
     setCustomSize('')
+  }
+
+  const addSizesToPresetPool = (sizes: BannerSize[]) => {
+    setExtraSizes(prev => {
+      const existingKeys = new Set(prev.map(size => size.key))
+      const unique = sizes.filter(size => !existingKeys.has(size.key))
+      return unique.length > 0 ? [...prev, ...unique] : prev
+    })
+  }
+
+  const selectSmartMasterGroup = (group: MasterGroup, sizes: BannerSize[]) => {
+    clearOutputs()
+    addSizesToPresetPool(sizes)
+    setOutputScope('manual')
+    setActiveMasterGroupId(group.id)
+    setSelectedSizes(new Set(sizes.map(size => size.key)))
+    setSizeFilter('all')
+    setSizeSearch('')
+    toast({
+      title: `已定位 ${group.label}`,
+      description: `已选 ${sizes.map(size => size.key).join('、')}`,
+    })
+  }
+
+  const importSmartSizes = (text = smartSizeText) => {
+    const sizes = parseBannerSizeText(text)
+    if (sizes.length === 0) {
+      toast({ title: '未识别到尺寸', description: '可粘贴 2100x1180、1920×900 这类格式', variant: 'destructive' })
+      return
+    }
+
+    const groups = groupBannerSizesByMaster(sizes)
+    setSmartSizes(sizes)
+    addSizesToPresetPool(sizes)
+    setOutputScope('manual')
+
+    const firstGroup = groups[0]
+    if (firstGroup) {
+      setActiveMasterGroupId(firstGroup.group.id)
+      setSelectedSizes(new Set(firstGroup.sizes.map(size => size.key)))
+    } else {
+      setSelectedSizes(new Set(sizes.map(size => size.key)))
+    }
+    setSizeFilter('all')
+    setSizeSearch('')
+
+    toast({
+      title: `已识别 ${sizes.length} 个尺寸`,
+      description: `推荐 ${groups.length} 套母版，点击推荐项可快速定位`,
+    })
+  }
+
+  const importQuickDemandSizes = () => {
+    const text = QUICK_BANNER_DEMAND_SIZES.join('\n')
+    setSmartSizeText(text)
+    importSmartSizes(text)
   }
 
   const selectMasterGroup = (group: MasterGroup) => {
@@ -1235,6 +1341,85 @@ export default function BannerCropView() {
                   )
                 })}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pt-4 pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Wand2 className="h-4 w-4 text-muted-foreground" />
+                    智能尺寸定位
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    粘贴目标尺寸，自动推荐需要制作的 Banner 母版
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg border-border/80" onClick={importQuickDemandSizes}>
+                    本次 5 尺寸
+                  </Button>
+                  <Button size="sm" className="h-8 text-xs rounded-lg bg-foreground text-background hover:bg-foreground/90" onClick={() => importSmartSizes()}>
+                    智能定位
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <Textarea
+                className="min-h-20 text-xs font-mono rounded-lg"
+                value={smartSizeText}
+                onChange={event => {
+                  const text = event.target.value
+                  setSmartSizeText(text)
+                  setSmartSizes(parseBannerSizeText(text))
+                }}
+                placeholder={'2100x1180\n1920x900\n1242x699\n1200x700\n984x654'}
+              />
+              {smartMasterGroups.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                  {smartMasterGroups.map(({ group, sizes }) => {
+                    const isSelected = activeMasterGroupId === group.id
+                      && outputScope === 'manual'
+                      && sizes.every(size => selectedSizes.has(size.key))
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() => selectSmartMasterGroup(group, sizes)}
+                        className={cn(
+                          'text-left rounded-lg border p-3 transition-all',
+                          isSelected
+                            ? 'border-foreground bg-foreground text-background shadow-sm'
+                            : 'border-border/80 bg-card hover:border-foreground/40 hover:shadow-sm'
+                        )}
+                      >
+                        <div className={cn('text-[10px] font-semibold', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
+                          {group.code}_{group.master}
+                        </div>
+                        <div className="text-sm font-medium mt-0.5 leading-snug">{group.label}</div>
+                        <div className={cn('mt-1 text-[10px]', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
+                          建议做 1 张母版，输出 {sizes.length} 个尺寸
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {sizes.map(size => (
+                            <span
+                              key={size.key}
+                              className={cn(
+                                'font-mono text-[10px] px-1.5 py-0.5 rounded border',
+                                isSelected ? 'border-background/30 bg-background/15' : 'border-border bg-muted/40 text-muted-foreground'
+                              )}
+                            >
+                              {size.key}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 
