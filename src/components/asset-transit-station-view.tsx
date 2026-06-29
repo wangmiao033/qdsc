@@ -41,48 +41,116 @@ interface TransitPreset {
   sizes: string[]
 }
 
+const TRANSIT_VERTICAL_KV_SIZES = [
+  '1080x2064',
+  '1140x1501',
+  '1080x1920',
+  '900x1600',
+]
+
+const TRANSIT_M5_BANNER_SIZES = [
+  '2100x1180',
+  '1920x900',
+  '1242x699',
+  '1200x700',
+  '984x654',
+]
+
+const TRANSIT_M6_BANNER_SIZES = [
+  '1280x620',
+  '1200x534',
+  '720x360',
+  '720x350',
+  '656x320',
+  '640x320',
+  '644x260',
+]
+
+const TRANSIT_M7_BANNER_SIZES = [
+  '2000x360',
+  '2000x263',
+  '1600x440',
+  '1600x280',
+  '1440x600',
+  '1440x472',
+  '1440x216',
+  '1344x383',
+  '1032x342',
+]
+
+const TRANSIT_SQUARE_MIXED_SIZES = [
+  '1242x1242',
+  '984x984',
+  '600x600',
+  '300x340',
+  '330x250',
+  '320x260',
+  '300x300',
+]
+
+const TRANSIT_SMALL_MIXED_SIZES = [
+  '270x270',
+  '205x170',
+  '145x114',
+  '100x75',
+  '280x360',
+  '300x420',
+  '240x426',
+  '256x256',
+  '480x160',
+]
+
+const TRANSIT_ALL_SIZES = Array.from(new Set([
+  ...TRANSIT_VERTICAL_KV_SIZES,
+  ...TRANSIT_M5_BANNER_SIZES,
+  ...TRANSIT_M6_BANNER_SIZES,
+  ...TRANSIT_M7_BANNER_SIZES,
+  ...TRANSIT_SQUARE_MIXED_SIZES,
+  ...TRANSIT_SMALL_MIXED_SIZES,
+]))
+
 const TRANSIT_PRESETS: TransitPreset[] = [
+  {
+    id: 'all',
+    label: '全部中转尺寸合集',
+    description: '开屏、横版 Banner、超宽条幅、方图、小图统一收图',
+    sizes: TRANSIT_ALL_SIZES,
+  },
+  {
+    id: 'vertical-kv',
+    label: '竖版开屏 / KV 尺寸',
+    description: '开屏、竖版 KV、竖启屏素材',
+    sizes: TRANSIT_VERTICAL_KV_SIZES,
+  },
   {
     id: 'm7',
     label: 'M7 超宽条幅母版',
     description: '雷电、MuMu 的超宽顶部 / 预约 / 背景图',
-    sizes: [
-      '2000x360',
-      '2000x263',
-      '1600x440',
-      '1600x280',
-      '1440x600',
-      '1440x472',
-      '1440x216',
-      '1344x383',
-      '1032x342',
-    ],
+    sizes: TRANSIT_M7_BANNER_SIZES,
   },
   {
     id: 'm6',
     label: 'M6 常规横 Banner 母版',
     description: '233、当乐、百度、4399 部分 Banner',
-    sizes: [
-      '1280x620',
-      '1200x534',
-      '720x360',
-      '720x350',
-      '656x320',
-      '640x320',
-      '644x260',
-    ],
+    sizes: TRANSIT_M6_BANNER_SIZES,
   },
   {
     id: 'm5',
     label: 'M5 横版 Banner 5 尺寸',
     description: '常规横图和 3:2 横图组合',
-    sizes: [
-      '2100x1180',
-      '1920x900',
-      '1242x699',
-      '1200x700',
-      '984x654',
-    ],
+    sizes: TRANSIT_M5_BANNER_SIZES,
+  },
+  {
+    id: 'square-mixed',
+    label: '方图 / 近方素材尺寸',
+    description: '方形图、近方图、部分横竖混合小素材',
+    sizes: TRANSIT_SQUARE_MIXED_SIZES,
+  },
+  {
+    id: 'small-mixed',
+    label: '小图 / 信息流素材尺寸',
+    description: '小图标、列表图、信息流小素材、横条小图',
+    sizes: TRANSIT_SMALL_MIXED_SIZES,
   },
 ]
 
@@ -435,7 +503,7 @@ export default function AssetTransitStationView() {
                 <Archive className="h-4 w-4 text-muted-foreground" />
                 尺寸组
               </CardTitle>
-              <CardDescription className="text-xs">默认 M7，也可以粘贴临时尺寸</CardDescription>
+              <CardDescription className="text-xs">默认全部中转尺寸合集，也可以切换单独模板或粘贴临时尺寸</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div className="space-y-1">
