@@ -13,6 +13,7 @@ import {
   STORE_TOTAL_OUTPUTS,
   STORE_ZIP_ROOT,
   type StoreOutputSize,
+  type StoreScreenshotMaster,
 } from '@/data/store-screenshot-spec'
 import {
   clampCropAdjust,
@@ -206,6 +207,14 @@ export default function StoreScreenshotCropView() {
     || STORE_OUTPUT_SIZES[0]
   const activeAdjust = adjusts[activeSlot] || DEFAULT_STORE_CROP_ADJUST
   const currentOutputCount = activeMasterSizes.length * STORE_SLOT_COUNT
+  const landscapeMasters = useMemo(
+    () => STORE_SCREENSHOT_MASTERS.filter(master => master.orientation === 'landscape'),
+    []
+  )
+  const portraitMasters = useMemo(
+    () => STORE_SCREENSHOT_MASTERS.filter(master => master.orientation === 'portrait'),
+    []
+  )
 
   useEffect(() => { slotsRef.current = slots }, [slots])
   useEffect(() => { outputsRef.current = outputs }, [outputs])
@@ -498,6 +507,44 @@ export default function StoreScreenshotCropView() {
     }
   }
 
+  const renderMasterButton = (master: StoreScreenshotMaster) => {
+    const isSelected = effectiveMasterKey === master.master
+    return (
+      <button
+        key={master.code}
+        type="button"
+        onClick={() => selectMaster(master.master)}
+        className={cn(
+          'text-left rounded-xl border p-3 text-xs transition-all',
+          isSelected
+            ? 'border-foreground bg-foreground text-background shadow-md'
+            : 'border-border/80 bg-card hover:border-foreground/35'
+        )}
+      >
+        <div className={cn('font-mono text-[10px]', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
+          {master.code} · 母版 {master.master}
+        </div>
+        <div className="text-sm font-medium mt-0.5">{master.label}</div>
+        <div className={cn('mt-1 text-[10px]', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
+          {master.ratioLabel}
+        </div>
+        <div className="flex flex-wrap gap-1 mt-2">
+          {master.sizes.map(key => (
+            <span
+              key={key}
+              className={cn(
+                'font-mono text-[9px] px-1 py-0.5 rounded border',
+                isSelected ? 'border-background/30 bg-background/15' : 'border-border text-muted-foreground'
+              )}
+            >
+              {key}
+            </span>
+          ))}
+        </div>
+      </button>
+    )
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1680px] px-4 py-5 space-y-5 min-[1440px]:px-6">
       <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-4">
@@ -507,7 +554,7 @@ export default function StoreScreenshotCropView() {
             商店五图母版裁剪
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Store Screenshot 五图 · 独立 4 套母版（非 Banner）· 默认按当前母版生成
+            Store Screenshot 五图 · 独立 {STORE_SCREENSHOT_MASTERS.length} 套母版（非 Banner）· 默认按当前母版生成
           </p>
         </div>
         <Button variant="outline" size="sm" className="h-8 rounded-lg" onClick={resetAll} disabled={uploadedCount === 0 && outputs.length === 0}>
@@ -565,7 +612,14 @@ export default function StoreScreenshotCropView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STORE_SCREENSHOT_MASTERS.map(master => (
+                  <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">横版商店五图母版裁剪</div>
+                  {landscapeMasters.map(master => (
+                    <SelectItem key={master.master} value={master.master} className="text-xs">
+                      {formatStoreMasterLabel(master)}
+                    </SelectItem>
+                  ))}
+                  <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">竖版商店五图母版裁剪</div>
+                  {portraitMasters.map(master => (
                     <SelectItem key={master.master} value={master.master} className="text-xs">
                       {formatStoreMasterLabel(master)}
                     </SelectItem>
@@ -924,45 +978,28 @@ export default function StoreScreenshotCropView() {
 
           <Card className="rounded-xl border border-border/80 shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-medium">Store Screenshot 母版一览（4 套）</CardTitle>
-              <CardDescription className="text-xs">独立于 Banner 16 类 · 点击切换母版</CardDescription>
+              <CardTitle className="text-sm font-medium">Store Screenshot 母版一览（{STORE_SCREENSHOT_MASTERS.length} 套）</CardTitle>
+              <CardDescription className="text-xs">横版和竖版分开管理 · 点击切换母版</CardDescription>
             </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-4 gap-3">
-                {STORE_SCREENSHOT_MASTERS.map(master => {
-                  const isSelected = effectiveMasterKey === master.master
-                  return (
-                    <button
-                      key={master.code}
-                      type="button"
-                      onClick={() => selectMaster(master.master)}
-                      className={cn(
-                        'text-left rounded-xl border p-3 text-xs transition-all',
-                        isSelected
-                          ? 'border-foreground bg-foreground text-background shadow-md'
-                          : 'border-border/80 bg-card hover:border-foreground/35'
-                      )}
-                    >
-                      <div className={cn('font-mono text-[10px]', isSelected ? 'text-background/70' : 'text-muted-foreground')}>
-                        {master.code} · {master.master} · {master.ratioLabel}
-                      </div>
-                      <div className="text-sm font-medium mt-0.5">{master.label}</div>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {master.sizes.map(key => (
-                          <span
-                            key={key}
-                            className={cn(
-                              'font-mono text-[9px] px-1 py-0.5 rounded border',
-                              isSelected ? 'border-background/30 bg-background/15' : 'border-border text-muted-foreground'
-                            )}
-                          >
-                            {key}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  )
-                })}
+            <CardContent className="px-4 pb-4 space-y-5">
+              <div className="space-y-2">
+                <div>
+                  <h3 className="text-sm font-semibold">横版商店五图母版裁剪</h3>
+                  <p className="text-[11px] text-muted-foreground">适合横版主图、商店横图、宽横版展示图。</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-4 gap-3">
+                  {landscapeMasters.map(renderMasterButton)}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="text-sm font-semibold">竖版商店五图母版裁剪</h3>
+                  <p className="text-[11px] text-muted-foreground">适合竖版商店截图、竖版详情图和特殊竖图。</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 min-[1440px]:grid-cols-4 gap-3">
+                  {portraitMasters.map(renderMasterButton)}
+                </div>
               </div>
             </CardContent>
           </Card>

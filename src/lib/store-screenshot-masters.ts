@@ -26,7 +26,7 @@ export function getSizesForStoreMaster(master: StoreScreenshotMaster): StoreOutp
 }
 
 /**
- * 根据原图尺寸匹配 Store Screenshot 母版（4 套，与 Banner 无关）
+ * 根据原图尺寸匹配 Store Screenshot 母版（与 Banner 无关）
  */
 export function findBestStoreMasterForSource(width: number, height: number): StoreScreenshotMaster {
   const sourceKey = `${width}x${height}`

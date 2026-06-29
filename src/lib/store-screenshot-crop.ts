@@ -251,7 +251,7 @@ export async function generateStoreScreenshotOutputs(
   return { outputs, failed }
 }
 
-/** 生成全部 12 个 Store Screenshot 尺寸 */
+/** 生成全部 Store Screenshot 尺寸 */
 export async function generateAllStoreScreenshotOutputs(
   sources: StoreScreenshotSource[],
   adjusts: Record<number, StoreCropAdjust>,
