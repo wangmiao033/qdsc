@@ -7,7 +7,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Info, Copy, Check, Download,
   Upload, Loader2, BarChart3, Clock, AlertOctagon, X, Layers, Zap, Target, ArrowRight, ArrowDown,
   FileSearch, RefreshCw, FileText, ImagePlus, FileImage, Eye, ScrollText,
-  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2, Ruler, Smartphone
+  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2, Ruler, Smartphone, PackageOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,7 @@ import ImageFormatConverterView from '@/components/image-format-converter-view'
 import QuickResizeView from '@/components/quick-resize-view'
 import ProductionBoardView from '@/components/production-board-view'
 import SizeBasedWorkflowView from '@/components/size-based-workflow-view'
+import AssetTransitStationView from '@/components/asset-transit-station-view'
 
 // ========== Types ==========
 interface MaterialSpec {
@@ -751,6 +752,7 @@ export default function WorkflowApp() {
             { id: 'digest', label: '需求消化', icon: FileSearch },
             { id: 'tasks', label: '任务生成器', icon: ListChecks },
             { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
+            { id: 'assetTransit', label: '素材中转站', icon: PackageOpen },
             { id: 'logs', label: '更新日志', icon: ScrollText },
             { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
             { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
@@ -836,6 +838,9 @@ export default function WorkflowApp() {
         )}
         {activeTab === 'acceptance' && (
           <AcceptanceView batchId={currentBatchId} onRefresh={refreshAll} />
+        )}
+        {activeTab === 'assetTransit' && (
+          <AssetTransitStationView />
         )}
         {activeTab === 'logs' && (
           <LogsView batchId={currentBatchId} onRefresh={refreshAll} />
