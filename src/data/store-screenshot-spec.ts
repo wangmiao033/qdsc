@@ -31,8 +31,11 @@ export const STORE_SCREENSHOT_SLOTS: StoreScreenshotSlot[] = [
 ]
 
 export const STORE_OUTPUT_SIZES: StoreOutputSize[] = [
+  { key: '720x405', width: 720, height: 405 },
+  { key: '800x450', width: 800, height: 450 },
   { key: '960x540', width: 960, height: 540 },
   { key: '1280x720', width: 1280, height: 720 },
+  { key: '1600x900', width: 1600, height: 900 },
   { key: '1920x1080', width: 1920, height: 1080 },
   { key: '800x600', width: 800, height: 600 },
   { key: '1024x768', width: 1024, height: 768 },
@@ -40,6 +43,7 @@ export const STORE_OUTPUT_SIZES: StoreOutputSize[] = [
   { key: '900x600', width: 900, height: 600 },
   { key: '1200x800', width: 1200, height: 800 },
   { key: '1500x1000', width: 1500, height: 1000 },
+  { key: '1600x960', width: 1600, height: 960 },
   { key: '1000x500', width: 1000, height: 500 },
   { key: '1600x800', width: 1600, height: 800 },
   { key: '1920x960', width: 1920, height: 960 },
@@ -122,6 +126,22 @@ export const STORE_SCREENSHOT_MASTERS: StoreScreenshotMaster[] = [
     ratioLabel: '输出 1000x500 / 1600x800 / 1920x960 / 2000x1000',
     label: '2000x1000 宽横版母版',
     sizes: ['1000x500', '1600x800', '1920x960', '2000x1000'],
+  },
+  {
+    code: '09',
+    master: '1600x900',
+    orientation: 'landscape',
+    ratioLabel: '输出 720x405 / 800x450 / 1600x900',
+    label: '1600x900 横版 16:9 母版',
+    sizes: ['720x405', '800x450', '1600x900'],
+  },
+  {
+    code: '10',
+    master: '1600x960',
+    orientation: 'landscape',
+    ratioLabel: '输出 1600x960',
+    label: '1600x960 横版 5:3 母版',
+    sizes: ['1600x960'],
   },
 ]
 
