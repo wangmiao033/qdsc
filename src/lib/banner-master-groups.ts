@@ -45,8 +45,11 @@ export function matchMasterGroupByRatio(width: number, height: number): MasterGr
   if (ratio >= 1.45 && ratio < 1.60) return getMasterGroupById('1500x1000')
   if (ratio >= 1.60 && ratio < 1.90) return getMasterGroupById('1920x1080')
   if (ratio >= 1.90 && ratio < 2.20) return getMasterGroupById('2000x1000')
+  if (ratio >= 2.32 && ratio < 2.50) return getMasterGroupById('m7-c-1440x600')
   if (ratio >= 2.20 && ratio < 2.55) return getMasterGroupById('2400x1000')
+  if (ratio >= 3.00 && ratio < 3.75) return getMasterGroupById('m7-a-2000x600')
   if (ratio >= 2.55 && ratio < 3.25) return getMasterGroupById('1920x640')
+  if (ratio >= 4.80 && ratio < 8.20) return getMasterGroupById('m7-b-2000x360')
   if (ratio >= 3.25 && ratio < 4.20) return getMasterGroupById('1920x500')
   if (ratio >= 4.20) return getMasterGroupById('1920x320')
   return null
