@@ -1,5 +1,7 @@
 qdsc/
 node_modules/
 .next/
+.env.local
+.env.*.local
 import-specs.js
 tsconfig.tsbuildinfo

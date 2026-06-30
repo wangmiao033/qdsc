@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, FileArchive, ImagePlus, Loader2,
+  AlertTriangle, CheckCircle2, Download, FileArchive, ImagePlus, Loader2,
   RefreshCw, ShieldCheck, Sparkles, Upload
 } from 'lucide-react'
 import JSZip from 'jszip'
@@ -49,7 +49,17 @@ interface OutpaintPlan {
   sides: string[]
 }
 
+interface AiOutput {
+  key: string
+  name: string
+  width: number
+  height: number
+  blob: Blob
+  url: string
+}
+
 const TARGET_SIZES: TargetSize[] = [
+  { key: '2000x263', width: 2000, height: 263, note: '超扁横幅，必须 AI 补左右边缘' },
   { key: '2000x600', width: 2000, height: 600, note: '同母版比例，可直接输出' },
   { key: '1600x440', width: 1600, height: 440, note: '更扁，建议补左右边缘' },
   { key: '1344x383', width: 1344, height: 383, note: '更扁，建议补左右边缘' },
@@ -212,6 +222,41 @@ async function makeMaskBlob(plan: OutpaintPlan) {
   return canvasToBlob(canvas)
 }
 
+async function makeAiInputBlob(source: SourceImage, plan: OutpaintPlan) {
+  const image = await loadImageElement(source.previewUrl)
+  const canvas = document.createElement('canvas')
+  canvas.width = plan.target.width
+  canvas.height = plan.target.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建画布')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(image, plan.drawX, plan.drawY, plan.drawWidth, plan.drawHeight)
+  return canvasToBlob(canvas)
+}
+
+async function makeAiEditMaskBlob(plan: OutpaintPlan) {
+  const canvas = document.createElement('canvas')
+  canvas.width = plan.target.width
+  canvas.height = plan.target.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建画布')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(plan.drawX, plan.drawY, plan.drawWidth, plan.drawHeight)
+  return canvasToBlob(canvas)
+}
+
+function base64ToBlob(base64: string, mimeType: string) {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: mimeType })
+}
+
 function makePrompt(source: SourceImage, plan: OutpaintPlan) {
   if (plan.sides.length === 0) {
     return `${plan.target.key}: source ratio already matches target. Export directly without AI repaint.`
@@ -255,6 +300,7 @@ function PlanPreview({ source, plan }: { source: SourceImage; plan: OutpaintPlan
 export default function AiSafeOutpaintView() {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const outputsRef = useRef<AiOutput[]>([])
   const [source, setSource] = useState<SourceImage | null>(null)
   const [isReading, setIsReading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -262,6 +308,12 @@ export default function AiSafeOutpaintView() {
   const [offsetX, setOffsetX] = useState(0)
   const [offsetY, setOffsetY] = useState(0)
   const [zipFileName, setZipFileName] = useState('')
+  const [generatingKey, setGeneratingKey] = useState<string | null>(null)
+  const [outputs, setOutputs] = useState<AiOutput[]>([])
+
+  useEffect(() => {
+    outputsRef.current = outputs
+  }, [outputs])
 
   const plans = useMemo(() => {
     if (!source) return []
@@ -273,13 +325,17 @@ export default function AiSafeOutpaintView() {
   useEffect(() => {
     return () => {
       if (source) URL.revokeObjectURL(source.previewUrl)
+      outputsRef.current.forEach(output => URL.revokeObjectURL(output.url))
     }
   }, [source])
 
   const clearSource = () => {
     if (source) URL.revokeObjectURL(source.previewUrl)
+    outputs.forEach(output => URL.revokeObjectURL(output.url))
     setSource(null)
     setZipFileName('')
+    setOutputs([])
+    setGeneratingKey(null)
   }
 
   const addFile = async (fileList: FileList | File[]) => {
@@ -295,10 +351,12 @@ export default function AiSafeOutpaintView() {
     try {
       const nextSource = await readSourceImage(imageFile)
       if (source) URL.revokeObjectURL(source.previewUrl)
+      outputs.forEach(output => URL.revokeObjectURL(output.url))
       setSource(nextSource)
       setZipFileName(`${sanitizeName(nextSource.baseName)}_ai_outpaint_plan`)
       setOffsetX(0)
       setOffsetY(0)
+      setOutputs([])
     } catch (error) {
       const message = error instanceof Error ? error.message : '图片读取失败'
       toast({ title: '图片读取失败', description: message, variant: 'destructive' })
@@ -365,6 +423,68 @@ export default function AiSafeOutpaintView() {
     } finally {
       setIsPacking(false)
     }
+  }
+
+  const generateOne = async (plan: OutpaintPlan) => {
+    if (!source) return
+    setGeneratingKey(plan.target.key)
+    try {
+      const imageBlob = await makeAiInputBlob(source, plan)
+      const maskBlob = await makeAiEditMaskBlob(plan)
+      const form = new FormData()
+      form.append('image', imageBlob, `${plan.target.key}_input.png`)
+      form.append('mask', maskBlob, `${plan.target.key}_mask.png`)
+      form.append('prompt', makePrompt(source, plan))
+      form.append('width', String(plan.target.width))
+      form.append('height', String(plan.target.height))
+
+      const response = await fetch('/api/ai-safe-outpaint', {
+        method: 'POST',
+        body: form,
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(data?.error || `AI 生成失败：${response.status}`)
+      }
+      if (!data?.base64) throw new Error('AI 没有返回图片')
+
+      const blob = base64ToBlob(data.base64, data.mimeType || 'image/png')
+      const url = URL.createObjectURL(blob)
+      const name = `${sanitizeName(source.baseName)}_ai_${plan.target.key}.png`
+      setOutputs(prev => {
+        const next = prev.filter(output => {
+          if (output.key === plan.target.key) URL.revokeObjectURL(output.url)
+          return output.key !== plan.target.key
+        })
+        return [...next, {
+          key: plan.target.key,
+          name,
+          width: plan.target.width,
+          height: plan.target.height,
+          blob,
+          url,
+        }]
+      })
+      toast({ title: 'AI 扩图完成', description: `${plan.target.key} 已生成` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI 生成失败'
+      toast({ title: 'AI 生成失败', description: message, variant: 'destructive' })
+    } finally {
+      setGeneratingKey(null)
+    }
+  }
+
+  const downloadOutput = (output: AiOutput) => {
+    saveAs(output.blob, output.name)
+  }
+
+  const downloadOutputsZip = async () => {
+    if (outputs.length === 0) return
+    const zip = new JSZip()
+    outputs.forEach(output => zip.file(output.name, output.blob))
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const name = sanitizeName(zipFileName.replace(/_plan$/, '_outputs')) || 'ai_safe_outpaint_outputs'
+    saveAs(blob, `${name}.zip`)
   }
 
   return (
@@ -580,12 +700,64 @@ export default function AiSafeOutpaintView() {
                           <span>；AI 只重画 {plan.sides.join('、')} 边</span>
                         )}
                       </div>
+
+                      <Button
+                        className="w-full h-8 text-xs"
+                        onClick={() => generateOne(plan)}
+                        disabled={generatingKey !== null || isReading}
+                      >
+                        {generatingKey === plan.target.key ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        {generatingKey === plan.target.key ? 'AI 生成中...' : `AI 生成 ${plan.target.key}`}
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {outputs.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      AI 成品
+                    </CardTitle>
+                    <CardDescription className="text-xs">{outputs.length} 个已生成文件，可单独下载或打包</CardDescription>
+                  </div>
+                  <Button size="sm" onClick={downloadOutputsZip}>
+                    <FileArchive className="h-4 w-4 mr-1" />
+                    打包下载 ZIP
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {outputs.map(output => (
+                    <div key={output.key} className="flex items-center gap-3 rounded-md border p-2">
+                      <div className="h-16 w-28 shrink-0 rounded border bg-muted/30 flex items-center justify-center overflow-hidden">
+                        <img src={output.url} alt={output.name} className="max-h-full max-w-full object-contain" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium" title={output.name}>{output.name}</div>
+                        <div className="mt-1 text-[10px] text-muted-foreground font-mono">{output.width}x{output.height} · {formatBytes(output.blob.size)}</div>
+                      </div>
+                      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => downloadOutput(output)}>
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        下载
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {source && (
             <Card>
