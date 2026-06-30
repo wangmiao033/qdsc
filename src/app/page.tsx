@@ -7,7 +7,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Info, Copy, Check, Download,
   Upload, Loader2, BarChart3, Clock, AlertOctagon, X, Layers, Zap, Target, ArrowRight, ArrowDown,
   FileSearch, RefreshCw, FileText, ImagePlus, FileImage, Eye, ScrollText,
-  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2, Ruler, Smartphone, PackageOpen
+  Star, Settings, Crop, PlusCircle, Minus, Move, Maximize2, Ruler, Smartphone, PackageOpen, Sparkles
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,6 +34,7 @@ import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 import IconCropView from '@/components/icon-crop-view'
 import BannerCropView from '@/components/banner-crop-view'
+import AiSafeOutpaintView from '@/components/ai-safe-outpaint-view'
 import StoreScreenshotCropView from '@/components/store-screenshot-crop-view'
 import ImageFormatConverterView from '@/components/image-format-converter-view'
 import QuickResizeView from '@/components/quick-resize-view'
@@ -756,6 +757,7 @@ export default function WorkflowApp() {
             { id: 'logs', label: '更新日志', icon: ScrollText },
             { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
             { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
+            { id: 'aiSafeOutpaint', label: 'AI 安全扩图', icon: Sparkles },
             { id: 'storeScreenshot', label: '商店五图母版裁剪', icon: Smartphone },
             { id: 'quickResize', label: '快速改图', icon: Zap },
             { id: 'imageConvert', label: '格式转换', icon: FileDown },
@@ -850,6 +852,9 @@ export default function WorkflowApp() {
         )}
         {activeTab === 'bannerCrop' && (
           <BannerCropView />
+        )}
+        {activeTab === 'aiSafeOutpaint' && (
+          <AiSafeOutpaintView />
         )}
         {activeTab === 'storeScreenshot' && (
           <StoreScreenshotCropView />
