@@ -163,6 +163,13 @@ const NAV_GROUPS = [
 
 const NAV_IDS = new Set(NAV_GROUPS.flatMap(group => group.items.map(item => item.id)))
 
+const TOP_SHORTCUTS = [
+  { id: 'quickResize', label: '快速改图', icon: Zap },
+  { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
+  { id: 'aiSafeOutpaint', label: 'AI 扩图', icon: Sparkles },
+  { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
+] as const
+
 function getInitialViewFromBrowser() {
   if (typeof window === 'undefined') return 'dashboard'
 
@@ -924,7 +931,7 @@ export default function WorkflowApp() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-[#f6f7fb]">
-        <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur">
+        <div className="sticky top-0 z-20 flex min-h-14 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-6 py-2 backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
               <activeNavEntry.item.icon className="h-4 w-4" />
@@ -934,11 +941,39 @@ export default function WorkflowApp() {
               <div className="truncate text-sm font-semibold text-slate-950">{activeNavEntry.item.label}</div>
             </div>
           </div>
-          <div className="hidden max-w-[420px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 md:flex">
-            <PackageOpen className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">
-              {currentBatch ? `${currentBatch.gameName} - ${currentBatch.batchName}` : '暂无当前批次'}
-            </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 xl:flex">
+              {TOP_SHORTCUTS.map(shortcut => (
+                <button
+                  key={shortcut.id}
+                  type="button"
+                  onClick={() => handleTabChange(shortcut.id)}
+                  className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                    activeTab === shortcut.id
+                      ? 'bg-white text-slate-950 shadow-sm'
+                      : 'text-slate-500 hover:bg-white hover:text-slate-950'
+                  }`}
+                >
+                  <shortcut.icon className="h-3.5 w-3.5" />
+                  {shortcut.label}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden h-9 rounded-lg border-slate-200 bg-white text-xs shadow-sm lg:inline-flex"
+              onClick={refreshAll}
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              刷新
+            </Button>
+            <div className="hidden max-w-[340px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 md:flex">
+              <PackageOpen className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
+                {currentBatch ? `${currentBatch.gameName} - ${currentBatch.batchName}` : '暂无当前批次'}
+              </span>
+            </div>
           </div>
         </div>
         {activeTab === 'dashboard' && (
