@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   LayoutDashboard, Database, ListChecks, ClipboardCheck, FileDown, FileUp,
   Plus, Pencil, Trash2, Search, Filter, ChevronLeft, ChevronRight,
@@ -738,6 +738,7 @@ function DigestView() {
 // ========== Main Page ==========
 export default function WorkflowApp() {
   const [activeTab, setActiveTab] = useState(getInitialViewFromBrowser)
+  const [navSearch, setNavSearch] = useState('')
   const [batches, setBatches] = useState<Batch[]>([])
   const [currentBatchId, setCurrentBatchId] = useState<string>('')
   const [specsData, setSpecsData] = useState<{
@@ -800,6 +801,21 @@ export default function WorkflowApp() {
     }
   }, [])
 
+  const filteredNavGroups = useMemo(() => {
+    const keyword = navSearch.trim().toLowerCase()
+    if (!keyword) return NAV_GROUPS
+
+    return NAV_GROUPS
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+          const haystack = `${item.id} ${item.label} ${group.label}`.toLowerCase()
+          return haystack.includes(keyword)
+        }),
+      }))
+      .filter(group => group.items.length > 0)
+  }, [navSearch])
+
   return (
     <div className="flex h-screen bg-muted/30">
       {/* Sidebar */}
@@ -811,8 +827,29 @@ export default function WorkflowApp() {
           </h1>
           <p className="text-xs text-muted-foreground mt-1">游戏素材流程管理</p>
         </div>
+        <div className="p-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={navSearch}
+              onChange={event => setNavSearch(event.target.value)}
+              placeholder="搜索功能..."
+              className="h-8 pl-8 pr-7 text-xs"
+            />
+            {navSearch && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setNavSearch('')}
+                aria-label="清空搜索"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-3">
-          {NAV_GROUPS.map(group => (
+          {filteredNavGroups.length > 0 ? filteredNavGroups.map(group => (
             <div key={group.label} className="space-y-1">
               <div className="px-3 pt-1 pb-1 text-[10px] font-medium tracking-wide text-muted-foreground">
                 {group.label}
@@ -834,7 +871,11 @@ export default function WorkflowApp() {
                 </button>
               ))}
             </div>
-          ))}
+          )) : (
+            <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+              没有匹配的功能
+            </div>
+          )}
         </nav>
         {/* Batch selector */}
         {batches.length > 0 && (
