@@ -122,6 +122,60 @@ interface AcceptanceBatchProgress {
   missingList: AcceptanceSizeEntry[]
 }
 
+const NAV_GROUPS = [
+  {
+    label: '总览',
+    items: [
+      { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
+      { id: 'productionBoard', label: '生产看板', icon: Zap },
+      { id: 'sizeWorkflow', label: '按尺寸生产', icon: Ruler },
+    ],
+  },
+  {
+    label: '流程',
+    items: [
+      { id: 'specs', label: '素材规格库', icon: Database },
+      { id: 'categorize', label: '智能归类', icon: Layers },
+      { id: 'digest', label: '需求消化', icon: FileSearch },
+      { id: 'tasks', label: '任务生成器', icon: ListChecks },
+      { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
+      { id: 'assetTransit', label: '素材中转站', icon: PackageOpen },
+    ],
+  },
+  {
+    label: '图片工具',
+    items: [
+      { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
+      { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
+      { id: 'aiSafeOutpaint', label: 'AI 安全扩图', icon: Sparkles },
+      { id: 'storeScreenshot', label: '商店五图母版裁剪', icon: Smartphone },
+      { id: 'quickResize', label: '快速改图', icon: Zap },
+      { id: 'imageConvert', label: '格式转换', icon: FileDown },
+    ],
+  },
+  {
+    label: '记录',
+    items: [
+      { id: 'logs', label: '更新日志', icon: ScrollText },
+    ],
+  },
+] as const
+
+const NAV_IDS = new Set(NAV_GROUPS.flatMap(group => group.items.map(item => item.id)))
+
+function getInitialViewFromBrowser() {
+  if (typeof window === 'undefined') return 'dashboard'
+
+  const params = new URLSearchParams(window.location.search)
+  const viewFromUrl = params.get('view') || window.location.hash.replace(/^#/, '')
+  if (NAV_IDS.has(viewFromUrl)) return viewFromUrl
+
+  const storedView = window.localStorage.getItem('qdsc_active_view') || ''
+  if (NAV_IDS.has(storedView)) return storedView
+
+  return 'dashboard'
+}
+
 interface AcceptanceSessionSummary {
   passed: number
   duplicate: number
@@ -683,7 +737,7 @@ function DigestView() {
 
 // ========== Main Page ==========
 export default function WorkflowApp() {
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(getInitialViewFromBrowser)
   const [batches, setBatches] = useState<Batch[]>([])
   const [currentBatchId, setCurrentBatchId] = useState<string>('')
   const [specsData, setSpecsData] = useState<{
@@ -732,6 +786,20 @@ export default function WorkflowApp() {
     }
   }
 
+  const handleTabChange = useCallback((view: string) => {
+    if (!NAV_IDS.has(view)) return
+    setActiveTab(view)
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('qdsc_active_view', view)
+      const url = new URL(window.location.href)
+      url.searchParams.set('view', view)
+      url.hash = ''
+      window.history.replaceState(null, '', url.toString())
+      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [])
+
   return (
     <div className="flex h-screen bg-muted/30">
       {/* Sidebar */}
@@ -743,37 +811,29 @@ export default function WorkflowApp() {
           </h1>
           <p className="text-xs text-muted-foreground mt-1">游戏素材流程管理</p>
         </div>
-        <nav className="flex-1 p-2 space-y-1">
-          {[
-            { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
-            { id: 'productionBoard', label: '生产看板', icon: Zap },
-            { id: 'sizeWorkflow', label: '按尺寸生产', icon: Ruler },
-            { id: 'specs', label: '素材规格库', icon: Database },
-            { id: 'categorize', label: '智能归类', icon: Layers },
-            { id: 'digest', label: '需求消化', icon: FileSearch },
-            { id: 'tasks', label: '任务生成器', icon: ListChecks },
-            { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
-            { id: 'assetTransit', label: '素材中转站', icon: PackageOpen },
-            { id: 'logs', label: '更新日志', icon: ScrollText },
-            { id: 'iconCrop', label: 'Icon 裁剪', icon: Crop },
-            { id: 'bannerCrop', label: 'Banner 裁剪', icon: FileImage },
-            { id: 'aiSafeOutpaint', label: 'AI 安全扩图', icon: Sparkles },
-            { id: 'storeScreenshot', label: '商店五图母版裁剪', icon: Smartphone },
-            { id: 'quickResize', label: '快速改图', icon: Zap },
-            { id: 'imageConvert', label: '格式转换', icon: FileDown },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                activeTab === item.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </button>
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label} className="space-y-1">
+              <div className="px-3 pt-1 pb-1 text-[10px] font-medium tracking-wide text-muted-foreground">
+                {group.label}
+              </div>
+              {group.items.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={activeTab === item.id ? 'page' : undefined}
+                  onClick={() => handleTabChange(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                    activeTab === item.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         {/* Batch selector */}
@@ -810,7 +870,7 @@ export default function WorkflowApp() {
           <ProductionBoardView
             onBatchChange={setCurrentBatchId}
             onRefresh={refreshAll}
-            onNavigateToIconCrop={() => setActiveTab('iconCrop')}
+            onNavigateToIconCrop={() => handleTabChange('iconCrop')}
           />
         )}
         {activeTab === 'sizeWorkflow' && (
