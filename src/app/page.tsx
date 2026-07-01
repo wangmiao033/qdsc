@@ -816,30 +816,47 @@ export default function WorkflowApp() {
       .filter(group => group.items.length > 0)
   }, [navSearch])
 
+  const activeNavEntry = useMemo(() => {
+    for (const group of NAV_GROUPS) {
+      const item = group.items.find(navItem => navItem.id === activeTab)
+      if (item) return { group: group.label, item }
+    }
+    return { group: '总览', item: NAV_GROUPS[0].items[0] }
+  }, [activeTab])
+
+  const currentBatch = useMemo(
+    () => batches.find(batch => batch.id === currentBatchId),
+    [batches, currentBatchId]
+  )
+
   return (
-    <div className="flex h-screen bg-muted/30">
+    <div className="flex h-screen bg-[#f6f7fb] text-slate-950">
       {/* Sidebar */}
-      <aside className="w-56 border-r bg-card flex flex-col shrink-0">
-        <div className="p-4 border-b">
-          <h1 className="font-bold text-base flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            素材工作台
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">游戏素材流程管理</p>
+      <aside className="w-[260px] shrink-0 border-r border-slate-200/80 bg-white/95 shadow-[8px_0_28px_rgba(15,23,42,0.04)] flex flex-col">
+        <div className="p-4 border-b border-slate-200/80">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-white shadow-sm">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-base leading-tight">素材工作台</h1>
+              <p className="text-xs text-slate-500 mt-0.5">游戏素材流程管理</p>
+            </div>
+          </div>
         </div>
-        <div className="p-2 border-b">
+        <div className="p-3 border-b border-slate-200/80">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
               value={navSearch}
               onChange={event => setNavSearch(event.target.value)}
               placeholder="搜索功能..."
-              className="h-8 pl-8 pr-7 text-xs"
+              className="h-9 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-8 text-xs shadow-none focus-visible:bg-white"
             />
             {navSearch && (
               <button
                 type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-950"
                 onClick={() => setNavSearch('')}
                 aria-label="清空搜索"
               >
@@ -848,10 +865,10 @@ export default function WorkflowApp() {
             )}
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
           {filteredNavGroups.length > 0 ? filteredNavGroups.map(group => (
             <div key={group.label} className="space-y-1">
-              <div className="px-3 pt-1 pb-1 text-[10px] font-medium tracking-wide text-muted-foreground">
+              <div className="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-wide text-slate-400">
                 {group.label}
               </div>
               {group.items.map(item => (
@@ -860,45 +877,70 @@ export default function WorkflowApp() {
                   type="button"
                   aria-current={activeTab === item.id ? 'page' : undefined}
                   onClick={() => handleTabChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                  className={`group relative w-full flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-all ${
                     activeTab === item.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      ? 'bg-slate-950 text-white shadow-sm'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                   }`}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+                    activeTab === item.id
+                      ? 'bg-white/10 text-white'
+                      : 'bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-slate-950'
+                  }`}>
+                    <item.icon className="h-4 w-4" />
+                  </span>
                   <span className="truncate">{item.label}</span>
                 </button>
               ))}
             </div>
           )) : (
-            <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-8 text-center text-xs text-slate-400">
               没有匹配的功能
             </div>
           )}
         </nav>
         {/* Batch selector */}
         {batches.length > 0 && (
-          <div className="p-3 border-t">
-            <Label className="text-xs text-muted-foreground">当前批次</Label>
-            <Select value={currentBatchId} onValueChange={setCurrentBatchId}>
-              <SelectTrigger className="h-8 text-xs mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {batches.map(b => (
-                  <SelectItem key={b.id} value={b.id} className="text-xs">
-                    {b.gameName} - {b.batchName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="p-3 border-t border-slate-200/80 bg-slate-50/70">
+            <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+              <Label className="px-1 text-[11px] font-medium text-slate-500">当前批次</Label>
+              <Select value={currentBatchId} onValueChange={setCurrentBatchId}>
+                <SelectTrigger className="h-9 text-xs mt-1 rounded-md border-slate-200 bg-slate-50 shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {batches.map(b => (
+                    <SelectItem key={b.id} value={b.id} className="text-xs">
+                      {b.gameName} - {b.batchName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-[#f6f7fb]">
+        <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              <activeNavEntry.item.icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-slate-400">{activeNavEntry.group}</div>
+              <div className="truncate text-sm font-semibold text-slate-950">{activeNavEntry.item.label}</div>
+            </div>
+          </div>
+          <div className="hidden max-w-[420px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 md:flex">
+            <PackageOpen className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {currentBatch ? `${currentBatch.gameName} - ${currentBatch.batchName}` : '暂无当前批次'}
+            </span>
+          </div>
+        </div>
         {activeTab === 'dashboard' && (
           <DashboardView
             batchId={currentBatchId}
