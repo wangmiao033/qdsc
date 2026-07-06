@@ -14,9 +14,8 @@ export interface MasterGroup {
 
 export const MASTER_GROUPS = masterGroupsJson as MasterGroup[]
 
-const M8_SIZE_KEYS = new Set([
+const SQUARE_CARD_SIZE_KEYS = new Set([
   '1200x1200',
-  '1242x1242',
   '984x984',
   '600x600',
   '300x340',
@@ -68,7 +67,7 @@ export function matchMasterGroupByRatio(width: number, height: number): MasterGr
 
 export function findMasterGroupForTargetSize(width: number, height: number) {
   const sizeKey = `${width}x${height}`
-  if (M8_SIZE_KEYS.has(sizeKey)) return getMasterGroupById('m8-1200x1200')
+  if (SQUARE_CARD_SIZE_KEYS.has(sizeKey)) return getMasterGroupById('m8-1200x1200')
 
   const owner = MASTER_GROUPS.find(group => group.sizes.includes(sizeKey))
   if (owner) return owner
@@ -89,7 +88,7 @@ export function findMasterGroupForTargetSize(width: number, height: number) {
 
 export function findBestMasterGroupForSource(width: number, height: number) {
   const sourceKey = `${width}x${height}`
-  if (M8_SIZE_KEYS.has(sourceKey)) return getMasterGroupById('m8-1200x1200')
+  if (SQUARE_CARD_SIZE_KEYS.has(sourceKey)) return getMasterGroupById('m8-1200x1200')
 
   const exactMaster = MASTER_GROUPS.find(group => group.master === sourceKey)
   if (exactMaster) return exactMaster

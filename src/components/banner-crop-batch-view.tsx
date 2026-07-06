@@ -744,7 +744,7 @@ export default function BannerCropBatchView() {
                 <div>
                   <CardTitle className="text-sm font-medium">母版分类覆盖</CardTitle>
                   <CardDescription className="text-xs mt-0.5">
-                    与单张模式共用 16 类规格 · 绿=已有母版
+                    与单张模式共用 {MASTER_GROUPS.length} 类规格 · 绿=已有母版
                   </CardDescription>
                 </div>
                 <Button
