@@ -744,7 +744,7 @@ function DigestView() {
 
 // ========== Main Page ==========
 export default function WorkflowApp() {
-  const [activeTab, setActiveTab] = useState(getInitialViewFromBrowser)
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [navSearch, setNavSearch] = useState('')
   const [batches, setBatches] = useState<Batch[]>([])
   const [currentBatchId, setCurrentBatchId] = useState<string>('')
@@ -753,6 +753,17 @@ export default function WorkflowApp() {
     total: number
     channels: string[]
   }>(emptySpecsData)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const frame = window.requestAnimationFrame(() => {
+      const initialView = getInitialViewFromBrowser()
+      setActiveTab(prev => prev === initialView ? prev : initialView)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   useEffect(() => {
     ;(async () => {
