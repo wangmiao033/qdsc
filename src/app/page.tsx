@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/use-toast'
 import IconCropView from '@/components/icon-crop-view'
-import BannerCropView from '@/components/banner-crop-view'
+import BannerCropSuiteView from '@/components/banner-crop-suite-view'
 import AiSafeOutpaintView from '@/components/ai-safe-outpaint-view'
 import StoreScreenshotCropView from '@/components/store-screenshot-crop-view'
 import ImageFormatConverterView from '@/components/image-format-converter-view'
@@ -1029,7 +1029,7 @@ export default function WorkflowApp() {
           <IconCropView />
         )}
         {activeTab === 'bannerCrop' && (
-          <BannerCropView />
+          <BannerCropSuiteView />
         )}
         {activeTab === 'aiSafeOutpaint' && (
           <AiSafeOutpaintView />

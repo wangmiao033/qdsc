@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Crop, Download, FileArchive,
-  ImagePlus, Layers, Loader2, RefreshCw, Settings2, Trash2, Upload, X
+  ImagePlus, Layers, Loader2, Package, RefreshCw, Settings2, Trash2, Upload, X, Zap
 } from 'lucide-react'
-import { getMasterRatio, MASTER_GROUPS } from '@/lib/banner-master-groups'
+import { getMasterRatio, MASTER_GROUPS, type MasterGroup } from '@/lib/banner-master-groups'
 import { parseStoredOutputFormat } from '@/lib/crop-utils'
 import {
   buildBannerZipFileName,
@@ -54,12 +54,46 @@ function fileFingerprint(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`
 }
 
+type SourceMatchKind = 'master' | 'size' | 'ratio'
+
+const SOURCE_MATCH_LABELS: Record<SourceMatchKind, string> = {
+  master: '母版精确',
+  size: '尺寸命中',
+  ratio: '比例匹配',
+}
+
+const SOURCE_MATCH_STYLES: Record<SourceMatchKind, string> = {
+  master: 'border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300',
+  size: 'border-sky-600/30 bg-sky-50 text-sky-700 dark:bg-sky-950/35 dark:text-sky-300',
+  ratio: 'border-red-600/40 bg-red-50 text-red-700 dark:bg-red-950/35 dark:text-red-300',
+}
+
+function getSourceMatchKind(source: BannerSource, group: MasterGroup): SourceMatchKind {
+  const sourceKey = `${source.width}x${source.height}`
+  if (group.master === sourceKey) return 'master'
+  if (group.sizes.includes(sourceKey)) return 'size'
+  return 'ratio'
+}
+
+function getInitialOutputFormat(): OutputFormat {
+  if (typeof window === 'undefined') return 'jpg'
+
+  try {
+    const stored = localStorage.getItem('qdsc_banner_crop_sizes')
+    if (!stored) return 'jpg'
+    const sizes: Array<{ format?: string }> = JSON.parse(stored)
+    return parseStoredOutputFormat(sizes.find(size => size.format)?.format) || 'jpg'
+  } catch {
+    return 'jpg'
+  }
+}
+
 export default function BannerCropBatchView() {
   const [sources, setSources] = useState<BannerSource[]>([])
   const [outputs, setOutputs] = useState<BannerOutput[]>([])
   const [cropMode, setCropMode] = useState<CropMode>('cover')
   const [focalPoint, setFocalPoint] = useState<FocalPoint>('center')
-  const [outputFormat, setOutputFormat] = useState<OutputFormat>('jpg')
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>(getInitialOutputFormat)
   const [quality, setQuality] = useState(92)
   const [backgroundColor, setBackgroundColor] = useState('#000000')
   const [isDragging, setIsDragging] = useState(false)
@@ -80,7 +114,10 @@ export default function BannerCropBatchView() {
 
   const sourcePlans = useMemo(
     () => sources
-      .map(source => ({ source, group: findBestMasterGroup(source) }))
+      .map(source => {
+        const group = findBestMasterGroup(source)
+        return { source, group, matchKind: getSourceMatchKind(source, group) }
+      })
       .sort((a, b) => a.group.code.localeCompare(b.group.code) || a.source.name.localeCompare(b.source.name)),
     [sources]
   )
@@ -119,6 +156,30 @@ export default function BannerCropBatchView() {
     [sourcePlans]
   )
 
+  const missingGroups = useMemo(
+    () => MASTER_GROUPS.filter(group => !coveredGroupIds.has(group.id)),
+    [coveredGroupIds]
+  )
+
+  const matchStats = useMemo(
+    () => sourcePlans.reduce(
+      (stats, plan) => {
+        stats[plan.matchKind] += 1
+        return stats
+      },
+      { master: 0, size: 0, ratio: 0 } as Record<SourceMatchKind, number>
+    ),
+    [sourcePlans]
+  )
+
+  const packageWarnings = useMemo(() => {
+    const warnings: string[] = []
+    if (missingGroups.length > 0) warnings.push(`缺 ${missingGroups.length} 类母版`)
+    if (conflictGroupIds.size > 0) warnings.push(`${conflictGroupIds.size} 类同类多张`)
+    if (matchStats.ratio > 0) warnings.push(`${matchStats.ratio} 张比例匹配`)
+    return warnings
+  }, [conflictGroupIds.size, matchStats.ratio, missingGroups.length])
+
   const outputsStale = useMemo(() => {
     if (outputs.length === 0) return false
     const sourceIds = new Set(sources.map(source => source.id))
@@ -154,6 +215,7 @@ export default function BannerCropBatchView() {
   const invalidateOutputs = () => {
     outputs.forEach(output => URL.revokeObjectURL(output.url))
     setOutputs([])
+    setExpandedResultSources(new Set())
     setProgress(0)
   }
 
@@ -165,23 +227,6 @@ export default function BannerCropBatchView() {
       outputsRef.current.forEach(output => URL.revokeObjectURL(output.url))
     }
   }, [])
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('qdsc_banner_crop_sizes')
-      if (!stored) return
-      const sizes: Array<{ format?: string }> = JSON.parse(stored)
-      const firstFormat = parseStoredOutputFormat(sizes.find(size => size.format)?.format)
-      if (firstFormat) setOutputFormat(firstFormat)
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
-  useEffect(() => {
-    if (outputs.length === 0) return
-    setExpandedResultSources(new Set(sources.map(source => source.id)))
-  }, [outputs.length])
 
   const addSources = async (fileList: FileList | File[] | null | undefined) => {
     if (!fileList || fileList.length === 0) return
@@ -287,7 +332,7 @@ export default function BannerCropBatchView() {
     resetFileInput()
   }
 
-  const handleGenerate = async () => {
+  const buildCurrentOutputs = async (options: { showToast?: boolean } = {}) => {
     if (sources.length === 0 || isGenerating) return
 
     const plans = generationPlans
@@ -304,40 +349,93 @@ export default function BannerCropBatchView() {
     setIsGenerating(true)
     setProgress(0)
 
-    const { outputs: nextOutputs, failed } = await generateBannerOutputs(
-      plans,
-      cropSettings,
-      setProgress,
-      { layout: 'flat', useFormatFolder: false }
-    )
+    try {
+      const { outputs: nextOutputs, failed } = await generateBannerOutputs(
+        plans,
+        cropSettings,
+        setProgress,
+        { layout: 'flat', useFormatFolder: false }
+      )
 
-    setOutputs(nextOutputs)
-    setIsGenerating(false)
+      setOutputs(nextOutputs)
+      setExpandedResultSources(new Set(sources.map(source => source.id)))
 
-    if (failed > 0) {
+      if (options.showToast !== false) {
+        if (failed > 0) {
+          toast({
+            title: `生成完成：${nextOutputs.length} 个，失败 ${failed} 个`,
+            variant: 'destructive',
+          })
+        } else {
+          toast({
+            title: `生成完成：${nextOutputs.length} 个文件`,
+            description: `来自 ${sources.length} 张母版 · ${formatBytes(nextOutputs.reduce((s, o) => s + o.blob.size, 0))}`,
+          })
+        }
+      }
+
+      return { outputs: nextOutputs, failed }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '生成失败'
       toast({
-        title: `生成完成：${nextOutputs.length} 个，失败 ${failed} 个`,
+        title: '生成失败',
+        description: reason,
         variant: 'destructive',
       })
-    } else {
+      return null
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    await buildCurrentOutputs()
+  }
+
+  const saveOutputsZip = async (items: BannerOutput[]) => {
+    if (items.length === 0 || isZipping) return false
+    setIsZipping(true)
+    try {
+      const zip = new JSZip()
+      items.forEach(output => zip.file(output.path, output.blob))
+      const blob = await zip.generateAsync({ type: 'blob' })
+      saveAs(blob, buildBannerZipFileName(items, { flatPack: true }))
+      return true
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '打包失败'
       toast({
-        title: `生成完成：${nextOutputs.length} 个文件`,
-        description: `来自 ${sources.length} 张母版 · ${formatBytes(nextOutputs.reduce((s, o) => s + o.blob.size, 0))}`,
+        title: 'ZIP 打包失败',
+        description: reason,
+        variant: 'destructive',
       })
+      return false
+    } finally {
+      setIsZipping(false)
     }
   }
 
   const downloadZip = async () => {
-    if (outputs.length === 0 || isZipping) return
-    setIsZipping(true)
-    try {
-      const zip = new JSZip()
-      outputs.forEach(output => zip.file(output.path, output.blob))
-      const blob = await zip.generateAsync({ type: 'blob' })
-      saveAs(blob, buildBannerZipFileName(outputs, { flatPack: true }))
-    } finally {
-      setIsZipping(false)
-    }
+    await saveOutputsZip(outputs)
+  }
+
+  const handleOneClickPack = async () => {
+    if (sources.length === 0 || isGenerating || isReading || isZipping || totalOutputCount === 0) return
+
+    const result = await buildCurrentOutputs({ showToast: false })
+    if (!result || result.outputs.length === 0) return
+
+    const saved = await saveOutputsZip(result.outputs)
+    if (!saved) return
+
+    const warningText = packageWarnings.length > 0
+      ? `需复核：${packageWarnings.join(' · ')}`
+      : '匹配完整，可直接复核交付'
+
+    toast({
+      title: `一键出包已下载（测试）：${result.outputs.length} 个文件`,
+      description: result.failed > 0 ? `${warningText} · 失败 ${result.failed} 个` : warningText,
+      variant: result.failed > 0 || packageWarnings.length > 0 ? 'destructive' : 'default',
+    })
   }
 
   const toggleResultSource = (sourceId: string) => {
@@ -398,10 +496,13 @@ export default function BannerCropBatchView() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
             <Layers className="h-5 w-5 text-foreground" />
-            Banner 裁剪（批量）
+            Banner 一键出包
+            <Badge className="border-red-600 bg-red-600 text-white text-[10px] hover:bg-red-600">
+              测试中
+            </Badge>
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            多张母版一次上传，每张自动匹配分类并裁切；单张预览与手选尺寸请用「Banner 裁剪」
+            多张母版一次上传，自动匹配分类、批量生成并打包；该流程还需 1-2 轮复核优化
           </p>
         </div>
         <Button
@@ -621,15 +722,56 @@ export default function BannerCropBatchView() {
                 </div>
               )}
 
+              <div className="rounded-xl border border-red-600/35 bg-red-50/80 p-3 text-red-950 dark:bg-red-950/25 dark:text-red-100">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Zap className="h-4 w-4 shrink-0" />
+                    <span className="text-sm font-semibold">一键出包</span>
+                    <Badge className="h-5 border-red-600 bg-red-600 px-1.5 text-[9px] text-white hover:bg-red-600">
+                      TEST
+                    </Badge>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-medium">
+                    {sources.length === 0 ? '待上传' : packageWarnings.length > 0 ? '需复核' : '可出包'}
+                  </span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[10px]">
+                  <div className="rounded-md border border-red-600/20 bg-white/55 px-1.5 py-1 dark:bg-black/15">
+                    <div className="font-semibold tabular-nums">{coveredGroupIds.size}/{MASTER_GROUPS.length}</div>
+                    <div className="opacity-75">覆盖</div>
+                  </div>
+                  <div className="rounded-md border border-red-600/20 bg-white/55 px-1.5 py-1 dark:bg-black/15">
+                    <div className="font-semibold tabular-nums">{matchStats.ratio}</div>
+                    <div className="opacity-75">比例匹配</div>
+                  </div>
+                  <div className="rounded-md border border-red-600/20 bg-white/55 px-1.5 py-1 dark:bg-black/15">
+                    <div className="font-semibold tabular-nums">{totalOutputCount}</div>
+                    <div className="opacity-75">预计输出</div>
+                  </div>
+                </div>
+                <Button
+                  className="mt-3 h-9 w-full rounded-lg bg-red-600 text-white hover:bg-red-700"
+                  disabled={sources.length === 0 || isGenerating || isReading || isZipping || totalOutputCount === 0}
+                  onClick={() => void handleOneClickPack()}
+                >
+                  {isGenerating || isZipping ? (
+                    <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />处理中...</>
+                  ) : (
+                    <><Package className="mr-1.5 h-4 w-4" />一键出包（测试）</>
+                  )}
+                </Button>
+              </div>
+
               <Button
-                className="w-full h-9 rounded-lg bg-foreground text-background hover:bg-foreground/90"
+                variant="outline"
+                className="w-full h-9 rounded-lg border-border/80"
                 disabled={sources.length === 0 || isGenerating || isReading || totalOutputCount === 0}
                 onClick={() => void handleGenerate()}
               >
                 {isGenerating ? (
                   <><Loader2 className="h-4 w-4 mr-1 animate-spin" />生成中...</>
                 ) : (
-                  <><Crop className="h-4 w-4 mr-1" />生成 Banner（{totalOutputCount} 个文件）</>
+                  <><Crop className="h-4 w-4 mr-1" />只生成预览（{totalOutputCount} 个文件）</>
                 )}
               </Button>
               {isGenerating && <Progress value={progress} className="h-1.5 rounded-full" />}
@@ -681,7 +823,7 @@ export default function BannerCropBatchView() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[min(480px,50vh)] overflow-y-auto pr-1">
-                  {sourcePlans.map(({ source, group }, index) => {
+                  {sourcePlans.map(({ source, group, matchKind }, index) => {
                     const hasConflict = conflictGroupIds.has(group.id)
                     const groupSizes = getGroupSizes(group, sizeByKey)
                     return (
@@ -711,6 +853,9 @@ export default function BannerCropBatchView() {
                             <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
                               {group.code}
                             </Badge>
+                            <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', SOURCE_MATCH_STYLES[matchKind])}>
+                              {SOURCE_MATCH_LABELS[matchKind]}
+                            </Badge>
                             <span className="text-[10px] text-muted-foreground truncate">{group.label}</span>
                             <span className="text-[10px] text-muted-foreground">→ {groupSizes.length} 尺寸</span>
                             {hasConflict && (
@@ -733,6 +878,76 @@ export default function BannerCropBatchView() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border border-red-600/30 bg-red-50/45 shadow-sm dark:bg-red-950/15">
+            <CardHeader className="px-4 pt-4 pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-red-950 dark:text-red-100">
+                  <Zap className="h-4 w-4" />
+                  一键出包测试清单
+                </CardTitle>
+                <Badge className="border-red-600 bg-red-600 text-[10px] text-white hover:bg-red-600">
+                  测试标红
+                </Badge>
+              </div>
+              <CardDescription className="text-xs text-red-900/75 dark:text-red-200/75">
+                当前阶段用于快速整包，仍需人工复核比例匹配和缺失母版
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
+                  <div className="text-lg font-semibold tabular-nums">{coveredGroupIds.size}</div>
+                  <div className="text-[10px] text-muted-foreground">已覆盖母版</div>
+                </div>
+                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
+                  <div className="text-lg font-semibold tabular-nums text-red-600">{missingGroups.length}</div>
+                  <div className="text-[10px] text-muted-foreground">缺母版</div>
+                </div>
+                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
+                  <div className="text-lg font-semibold tabular-nums">{matchStats.master + matchStats.size}</div>
+                  <div className="text-[10px] text-muted-foreground">精确/尺寸命中</div>
+                </div>
+                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
+                  <div className="text-lg font-semibold tabular-nums text-red-600">{matchStats.ratio}</div>
+                  <div className="text-[10px] text-muted-foreground">比例匹配</div>
+                </div>
+              </div>
+
+              {packageWarnings.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {packageWarnings.map(warning => (
+                    <Badge key={warning} variant="outline" className="border-red-600/35 bg-red-50 text-[10px] text-red-700 dark:bg-red-950/30 dark:text-red-200">
+                      {warning}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  上传母版已覆盖全部分类，未发现比例兜底或同类多张
+                </div>
+              )}
+
+              {missingGroups.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium text-red-700 dark:text-red-200">缺失母版</div>
+                  <div className="flex flex-wrap gap-1">
+                    {missingGroups.slice(0, 12).map(group => (
+                      <span key={group.id} className="rounded border border-red-600/25 bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {group.code}
+                      </span>
+                    ))}
+                    {missingGroups.length > 12 && (
+                      <span className="rounded border border-red-600/25 bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        +{missingGroups.length - 12}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
