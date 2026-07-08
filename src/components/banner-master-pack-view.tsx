@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle2, Download, FileArchive, ImagePlus, Loader2,
-  Package, RefreshCw, Settings2, Trash2, Upload, X
+  Package, RefreshCw, Settings2, ShieldCheck, Trash2, Upload, X
 } from 'lucide-react'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast'
 
 type MasterPackCode = 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6' | 'M7' | 'M8'
 type MatchState = 'exact' | 'derived' | 'missing'
+type MatchIssueLevel = 'error' | 'warning' | 'info'
 
 interface MasterPackSpec {
   code: MasterPackCode
@@ -51,6 +52,24 @@ interface MasterPackRow {
   state: MatchState
   targets: BannerSize[]
   maxCropLoss: number
+  issues: MatchIssue[]
+}
+
+interface MatchIssue {
+  level: MatchIssueLevel
+  message: string
+}
+
+interface DuplicateMatch {
+  code: MasterPackCode
+  source: BannerSource
+  previous: BannerSource
+}
+
+interface SafetyZone {
+  label: string
+  tone: 'amber' | 'red'
+  style: CSSProperties
 }
 
 const MASTER_PACK_SPECS: MasterPackSpec[] = [
@@ -185,6 +204,114 @@ function getRiskLabel(loss: number) {
   return '高风险'
 }
 
+function getIssueStyle(level: MatchIssueLevel) {
+  if (level === 'error') return 'border-red-600/35 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-200'
+  if (level === 'warning') return 'border-amber-600/35 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+  return 'border-sky-600/30 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-200'
+}
+
+function getIssueLabel(level: MatchIssueLevel) {
+  if (level === 'error') return '错误'
+  if (level === 'warning') return '复核'
+  return '提示'
+}
+
+function getSafetyZones(row: MasterPackRow): SafetyZone[] {
+  if (row.spec.code === 'M5') {
+    return [{
+      label: '左侧安全区',
+      tone: 'amber',
+      style: { left: 0, top: 0, width: '27%', height: '100%' },
+    }]
+  }
+
+  if (row.spec.code === 'M6') {
+    const widthRatio = row.source
+      ? Math.min(45, Math.max(20, Math.round((800 / row.source.width) * 100)))
+      : 36
+    return [{
+      label: '左侧 800px 留空',
+      tone: 'red',
+      style: { left: 0, top: 0, width: `${widthRatio}%`, height: '100%' },
+    }]
+  }
+
+  if (row.spec.code === 'M8') {
+    return [{
+      label: '底部 1/5 禁文字',
+      tone: 'amber',
+      style: { left: 0, bottom: 0, width: '100%', height: '20%' },
+    }]
+  }
+
+  return []
+}
+
+function getSafetyZoneClass(tone: SafetyZone['tone']) {
+  if (tone === 'red') return 'border-red-500/70 bg-red-500/25 text-red-950 dark:text-red-50'
+  return 'border-amber-500/70 bg-amber-400/25 text-amber-950 dark:text-amber-50'
+}
+
+function buildRowIssues(
+  spec: MasterPackSpec,
+  source: BannerSource | null,
+  state: MatchState,
+  sourceFrom: MasterPackCode | null,
+  maxCropLoss: number
+): MatchIssue[] {
+  const issues: MatchIssue[] = []
+
+  if (!source) {
+    issues.push({ level: 'error', message: `缺 ${spec.code} 母版，相关尺寸不会输出。` })
+    return issues
+  }
+
+  const sourceSize = sizeKeyOf(source)
+  const isExpectedSource = spec.sourceCandidates.length === 0 || spec.sourceCandidates.includes(sourceSize)
+
+  if (state === 'exact' && !isExpectedSource) {
+    issues.push({
+      level: 'error',
+      message: `文件名命中了 ${spec.code}，但源尺寸是 ${sourceSize}，应为 ${spec.sourceLabel}。`,
+    })
+  }
+
+  if (state === 'derived') {
+    issues.push({
+      level: 'warning',
+      message: `${spec.code} 由 ${sourceFrom} 派生，出包前需要看一眼主体和安全区。`,
+    })
+  }
+
+  if (spec.code === 'M7' && state === 'derived') {
+    issues.push({
+      level: 'warning',
+      message: 'M7 如果需要 Logo、Slogan、按钮，建议上传命名 M7 的 3200x420 成品图。',
+    })
+  }
+
+  if (spec.code === 'M6') {
+    issues.push({
+      level: 'warning',
+      message: 'M6 左侧 800px 留空要求特殊，当前只标记安全区，不自动改构图。',
+    })
+  }
+
+  if (maxCropLoss > 0.08) {
+    issues.push({
+      level: 'error',
+      message: `最大裁剪损失 ${(maxCropLoss * 100).toFixed(1)}%，建议人工复核。`,
+    })
+  } else if (maxCropLoss > 0.03) {
+    issues.push({
+      level: 'warning',
+      message: `最大裁剪损失 ${(maxCropLoss * 100).toFixed(1)}%，建议检查边缘内容。`,
+    })
+  }
+
+  return issues
+}
+
 function buildMasterPackZipFileName(outputs: BannerOutput[]) {
   if (outputs.length === 0) return 'banner_master_pack.zip'
   return `banner_master_pack_${outputs.length}files.zip`
@@ -193,25 +320,32 @@ function buildMasterPackZipFileName(outputs: BannerOutput[]) {
 function matchSourcesToSpecs(sources: BannerSource[]) {
   const assigned = new Map<MasterPackCode, BannerSource>()
   const unassigned: BannerSource[] = []
+  const duplicateMatches: DuplicateMatch[] = []
+
+  const assignSource = (code: MasterPackCode, source: BannerSource) => {
+    const previous = assigned.get(code)
+    if (previous) duplicateMatches.push({ code, source, previous })
+    assigned.set(code, source)
+  }
 
   for (const source of sources) {
     const namedCode = getMasterCodeFromName(source.name)
     if (namedCode) {
-      assigned.set(namedCode, source)
+      assignSource(namedCode, source)
       continue
     }
 
     const sourceSize = sizeKeyOf(source)
     const exactMatches = MASTER_PACK_SPECS.filter(spec => spec.sourceCandidates.includes(sourceSize))
     if (exactMatches.length > 0) {
-      assigned.set(exactMatches[0].code, source)
+      assignSource(exactMatches[0].code, source)
       continue
     }
 
     unassigned.push(source)
   }
 
-  return { assigned, unassigned }
+  return { assigned, unassigned, duplicateMatches }
 }
 
 export default function BannerMasterPackView() {
@@ -237,7 +371,7 @@ export default function BannerMasterPackView() {
     []
   )
 
-  const { assigned, unassigned } = useMemo(() => matchSourcesToSpecs(sources), [sources])
+  const { assigned, unassigned, duplicateMatches } = useMemo(() => matchSourcesToSpecs(sources), [sources])
 
   const rows = useMemo<MasterPackRow[]>(() => {
     return MASTER_PACK_SPECS.map(spec => {
@@ -249,6 +383,7 @@ export default function BannerMasterPackView() {
       const maxCropLoss = source
         ? targets.reduce((max, target) => Math.max(max, getCropLoss(source, target)), 0)
         : 0
+      const issues = buildRowIssues(spec, source, state, exactSource ? spec.code : fallbackSource ? spec.fallbackFrom || null : null, maxCropLoss)
 
       return {
         spec,
@@ -257,6 +392,7 @@ export default function BannerMasterPackView() {
         state,
         targets,
         maxCropLoss,
+        issues,
       }
     })
   }, [assigned, targetByCode])
@@ -265,6 +401,9 @@ export default function BannerMasterPackView() {
   const missingRows = rows.filter(row => row.state === 'missing')
   const derivedRows = rows.filter(row => row.state === 'derived')
   const riskyRows = rows.filter(row => row.source && row.maxCropLoss > 0.08)
+  const rowIssues = rows.flatMap(row => row.issues.map(issue => ({ ...issue, code: row.spec.code })))
+  const reviewIssueCount = rowIssues.length + unassigned.length + duplicateMatches.length
+  const hardIssueCount = rowIssues.filter(issue => issue.level === 'error').length + unassigned.length
   const totalOutputCount = coveredRows.reduce((sum, row) => sum + row.targets.length, 0)
   const totalOutputSize = outputs.reduce((sum, output) => sum + output.blob.size, 0)
 
@@ -500,7 +639,7 @@ export default function BannerMasterPackView() {
             <Badge className="border-sky-600 bg-sky-600 text-[10px] text-white hover:bg-sky-600">M1-M8</Badge>
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            只按指定母版源尺寸或文件名 M1-M8 配对，支持 M4/M6/M7 派生输出，避免旧规则误裁
+            只按指定母版源尺寸或文件名 M1-M8 配对，支持 M4/M6/M7 派生输出，并在出包前做尺寸与安全区体检
           </p>
         </div>
         <Button
@@ -602,7 +741,7 @@ export default function BannerMasterPackView() {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
+              <div className="grid grid-cols-4 divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
                 <div className="px-1 py-2">
                   <div className="text-base font-semibold tabular-nums">{coveredRows.length}</div>
                   <div className="text-[10px] text-muted-foreground">已配对</div>
@@ -614,6 +753,10 @@ export default function BannerMasterPackView() {
                 <div className="px-1 py-2">
                   <div className="text-base font-semibold tabular-nums">{totalOutputCount}</div>
                   <div className="text-[10px] text-muted-foreground">预计输出</div>
+                </div>
+                <div className="px-1 py-2">
+                  <div className={cn('text-base font-semibold tabular-nums', reviewIssueCount > 0 && 'text-red-600')}>{reviewIssueCount}</div>
+                  <div className="text-[10px] text-muted-foreground">需复核</div>
                 </div>
               </div>
             </CardContent>
@@ -698,15 +841,79 @@ export default function BannerMasterPackView() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          {(missingRows.length > 0 || derivedRows.length > 0 || riskyRows.length > 0 || unassigned.length > 0) && (
+          {(missingRows.length > 0 || derivedRows.length > 0 || riskyRows.length > 0 || unassigned.length > 0 || duplicateMatches.length > 0) && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-600/30 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>缺 {missingRows.length} 类</span>
               <span>派生 {derivedRows.length} 类</span>
               <span>高风险 {riskyRows.length} 类</span>
+              <span>重复 {duplicateMatches.length} 类</span>
               {unassigned.length > 0 && <span>未识别 {unassigned.length} 张</span>}
             </div>
           )}
+
+          <Card className="rounded-xl border border-border/80 shadow-sm">
+            <CardHeader className="px-4 pb-2 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  本期 07 体检
+                </CardTitle>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px] font-normal',
+                    hardIssueCount > 0
+                      ? 'border-red-600/35 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-200'
+                      : reviewIssueCount > 0
+                        ? 'border-amber-600/35 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+                        : 'border-emerald-600/35 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200'
+                  )}
+                >
+                  {reviewIssueCount === 0 ? '通过' : `${reviewIssueCount} 项需复核`}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 px-4 pb-4">
+              {reviewIssueCount === 0 ? (
+                <div className="rounded-lg border border-emerald-600/25 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200">
+                  当前上传内容没有发现缺母版、错误尺寸、重复匹配或高风险裁剪。
+                </div>
+              ) : (
+                <div className="grid gap-2 min-[1200px]:grid-cols-2">
+                  {rowIssues.slice(0, 8).map((issue, index) => (
+                    <div key={`${issue.code}-${index}`} className={cn('rounded-lg border px-3 py-2 text-xs', getIssueStyle(issue.level))}>
+                      <span className="font-mono font-semibold">{issue.code}</span>
+                      <span className="mx-1.5 opacity-70">/</span>
+                      <span className="font-medium">{getIssueLabel(issue.level)}</span>
+                      <span className="ml-1.5">{issue.message}</span>
+                    </div>
+                  ))}
+                  {duplicateMatches.map(match => (
+                    <div key={`${match.code}-${match.source.id}`} className={cn('rounded-lg border px-3 py-2 text-xs', getIssueStyle('warning'))}>
+                      <span className="font-mono font-semibold">{match.code}</span>
+                      <span className="mx-1.5 opacity-70">/</span>
+                      <span className="font-medium">重复</span>
+                      <span className="ml-1.5">重复上传，当前采用 {match.source.name}，已覆盖 {match.previous.name}。</span>
+                    </div>
+                  ))}
+                  {unassigned.map(source => (
+                    <div key={source.id} className={cn('rounded-lg border px-3 py-2 text-xs', getIssueStyle('error'))}>
+                      <span className="font-mono font-semibold">{source.width}x{source.height}</span>
+                      <span className="mx-1.5 opacity-70">/</span>
+                      <span className="font-medium">未识别</span>
+                      <span className="ml-1.5">{source.name} 没有匹配到 M1-M8 源尺寸或文件名。</span>
+                    </div>
+                  ))}
+                  {rowIssues.length > 8 && (
+                    <div className="rounded-lg border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                      还有 {rowIssues.length - 8} 项体检提示，可在下方 M1-M8 配对表逐项查看。
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="rounded-xl border border-border/80 shadow-sm">
             <CardHeader className="px-4 pb-2 pt-4">
@@ -723,6 +930,7 @@ export default function BannerMasterPackView() {
             <CardContent className="space-y-2 px-4 pb-4">
               {rows.map(row => {
                 const sourceSize = row.source ? sizeKeyOf(row.source) : ''
+                const safetyZones = getSafetyZones(row)
                 return (
                   <div
                     key={row.spec.code}
@@ -744,6 +952,15 @@ export default function BannerMasterPackView() {
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{row.spec.description}</p>
                         {row.spec.note && <p className="mt-1 text-[10px] text-muted-foreground">{row.spec.note}</p>}
+                        {safetyZones.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {safetyZones.map(zone => (
+                              <Badge key={zone.label} variant="outline" className={cn('text-[10px]', getSafetyZoneClass(zone.tone))}>
+                                {zone.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-1">
                         {row.state === 'missing' ? (
@@ -771,7 +988,17 @@ export default function BannerMasterPackView() {
                       <div className="rounded-lg border border-border/70 bg-background/70 p-2">
                         {row.source ? (
                           <div className="flex items-center gap-2">
-                            <img src={row.source.previewUrl} alt="" className="h-12 w-16 rounded-md border bg-muted object-cover" />
+                            <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border bg-muted">
+                              <img src={row.source.previewUrl} alt="" className="h-full w-full object-cover" />
+                              {safetyZones.map(zone => (
+                                <div
+                                  key={zone.label}
+                                  className={cn('absolute border border-dashed', getSafetyZoneClass(zone.tone))}
+                                  style={zone.style}
+                                  title={zone.label}
+                                />
+                              ))}
+                            </div>
                             <div className="min-w-0">
                               <div className="truncate text-xs font-medium" title={row.source.name}>{row.source.name}</div>
                               <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{sourceSize} · {formatBytes(row.source.size)}</div>
@@ -789,6 +1016,17 @@ export default function BannerMasterPackView() {
                         ))}
                       </div>
                     </div>
+
+                    {row.issues.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {row.issues.map((issue, index) => (
+                          <div key={`${issue.message}-${index}`} className={cn('max-w-full rounded-md border px-2 py-1 text-[10px] leading-relaxed', getIssueStyle(issue.level))}>
+                            <span className="font-medium">{getIssueLabel(issue.level)}：</span>
+                            <span className="break-words">{issue.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -802,7 +1040,8 @@ export default function BannerMasterPackView() {
               </CardHeader>
               <CardContent className="grid gap-2 px-4 pb-4 sm:grid-cols-2 min-[1440px]:grid-cols-3">
                 {sources.map(source => {
-                  const assignedRow = rows.find(row => row.source?.id === source.id)
+                  const assignedRows = rows.filter(row => row.source?.id === source.id)
+                  const overwrittenMatch = duplicateMatches.find(match => match.previous.id === source.id)
                   return (
                     <div key={source.id} className="flex items-center gap-2 rounded-lg border border-border/80 p-2">
                       <img src={source.previewUrl} alt="" className="h-12 w-12 shrink-0 rounded-md border bg-muted object-cover" />
@@ -810,7 +1049,11 @@ export default function BannerMasterPackView() {
                         <div className="truncate text-xs font-medium" title={source.name}>{source.name}</div>
                         <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{source.width}x{source.height}</div>
                         <div className="mt-1 text-[10px] text-muted-foreground">
-                          {assignedRow ? `匹配 ${assignedRow.spec.code}` : '未识别'}
+                          {assignedRows.length > 0
+                            ? `匹配 ${assignedRows.map(row => row.spec.code).join(' / ')}`
+                            : overwrittenMatch
+                              ? `被新的 ${overwrittenMatch.code} 覆盖`
+                              : '未识别'}
                         </div>
                       </div>
                       <Button variant="ghost" size="sm" className="h-7 w-7 shrink-0 p-0" onClick={() => removeSource(source.id)} aria-label={`移除 ${source.name}`}>
