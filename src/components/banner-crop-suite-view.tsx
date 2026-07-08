@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Crop, FileImage, Package, Zap } from 'lucide-react'
+import { Crop, FileImage, GitBranch, Package, Zap } from 'lucide-react'
 import BannerCropBatchView from '@/components/banner-crop-batch-view'
+import BannerMasterPackView from '@/components/banner-master-pack-view'
 import BannerCropView from '@/components/banner-crop-view'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -19,6 +20,11 @@ export default function BannerCropSuiteView() {
               <Package className="h-3.5 w-3.5" />
               一键出包
               <span className="rounded-sm bg-red-600 px-1 py-0 text-[9px] leading-4 text-white">测</span>
+            </TabsTrigger>
+            <TabsTrigger value="masterPack" className="h-7 gap-1.5 px-3 text-xs">
+              <GitBranch className="h-3.5 w-3.5" />
+              母版配对
+              <span className="rounded-sm bg-sky-600 px-1 py-0 text-[9px] leading-4 text-white">第一期 07</span>
             </TabsTrigger>
             <TabsTrigger value="single" className="h-7 gap-1.5 px-3 text-xs">
               <Crop className="h-3.5 w-3.5" />
@@ -39,6 +45,9 @@ export default function BannerCropSuiteView() {
 
       <TabsContent value="pack" className="m-0">
         <BannerCropBatchView />
+      </TabsContent>
+      <TabsContent value="masterPack" className="m-0">
+        <BannerMasterPackView />
       </TabsContent>
       <TabsContent value="single" className="m-0">
         <BannerCropView />
