@@ -848,33 +848,33 @@ export default function WorkflowApp() {
   )
 
   return (
-    <div className="flex h-screen bg-[#f6f7fb] text-slate-950">
+    <div className="flex h-screen bg-[#eef2f6] text-zinc-950">
       {/* Sidebar */}
-      <aside className="w-[260px] shrink-0 border-r border-slate-200/80 bg-white/95 shadow-[8px_0_28px_rgba(15,23,42,0.04)] flex flex-col">
-        <div className="p-4 border-b border-slate-200/80">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-white shadow-sm">
+      <aside className="flex w-[76px] shrink-0 flex-col overflow-hidden border-r border-zinc-200/90 bg-[#fbfcff] shadow-[10px_0_34px_rgba(15,23,42,0.07)] sm:w-[272px]">
+        <div className="border-b border-zinc-200/90 p-3 sm:p-4">
+          <div className="flex items-center justify-center gap-3 sm:justify-start">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-zinc-950 text-white shadow-md shadow-zinc-950/15 ring-1 ring-white/20">
               <BarChart3 className="h-5 w-5" />
             </div>
-            <div className="min-w-0">
-              <h1 className="font-bold text-base leading-tight">素材工作台</h1>
-              <p className="text-xs text-slate-500 mt-0.5">游戏素材流程管理</p>
+            <div className="hidden min-w-0 sm:block">
+              <h1 className="text-[17px] font-extrabold leading-tight text-zinc-950">素材工作台</h1>
+              <p className="mt-0.5 text-xs font-semibold text-zinc-500">游戏素材流程管理</p>
             </div>
           </div>
         </div>
-        <div className="p-3 border-b border-slate-200/80">
+        <div className="hidden border-b border-zinc-200/90 p-3 sm:block">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
             <Input
               value={navSearch}
               onChange={event => setNavSearch(event.target.value)}
               placeholder="搜索功能..."
-              className="h-9 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-8 text-xs shadow-none focus-visible:bg-white"
+              className="h-9 rounded-lg border-zinc-200 bg-zinc-50/90 pl-8 pr-8 text-xs font-semibold shadow-inner shadow-zinc-950/[0.02] focus-visible:bg-white"
             />
             {navSearch && (
               <button
                 type="button"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-950"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-950"
                 onClick={() => setNavSearch('')}
                 aria-label="清空搜索"
               >
@@ -883,10 +883,10 @@ export default function WorkflowApp() {
             )}
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+        <nav className="flex-1 space-y-2 overflow-y-auto p-2 sm:space-y-4 sm:p-3">
           {filteredNavGroups.length > 0 ? filteredNavGroups.map(group => (
             <div key={group.label} className="space-y-1">
-              <div className="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-wide text-slate-400">
+              <div className="hidden px-2 pb-1 pt-1 text-[11px] font-bold text-zinc-400 sm:block">
                 {group.label}
               </div>
               {group.items.map(item => (
@@ -895,36 +895,38 @@ export default function WorkflowApp() {
                   type="button"
                   aria-current={activeTab === item.id ? 'page' : undefined}
                   onClick={() => handleTabChange(item.id)}
-                  className={`group relative w-full flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-all ${
+                  title={item.label}
+                  className={`group relative flex h-11 w-full items-center justify-center gap-0 rounded-lg px-0 text-sm font-semibold transition-all sm:h-auto sm:justify-start sm:gap-3 sm:px-2.5 sm:py-2.5 ${
                     activeTab === item.id
-                      ? 'bg-slate-950 text-white shadow-sm'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                      ? 'bg-zinc-950 text-white shadow-md shadow-zinc-950/15'
+                      : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950'
                   }`}
                 >
+                  {activeTab === item.id && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-cyan-300" />}
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
                     activeTab === item.id
-                      ? 'bg-white/10 text-white'
-                      : 'bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-slate-950'
+                      ? 'bg-white/15 text-white'
+                      : 'bg-zinc-100 text-zinc-500 group-hover:bg-white group-hover:text-zinc-950'
                   }`}>
                     <item.icon className="h-4 w-4" />
                   </span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="hidden truncate sm:inline">{item.label}</span>
                 </button>
               ))}
             </div>
           )) : (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-8 text-center text-xs text-slate-400">
+            <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-8 text-center text-xs font-semibold text-zinc-400">
               没有匹配的功能
             </div>
           )}
         </nav>
         {/* Batch selector */}
         {batches.length > 0 && (
-          <div className="p-3 border-t border-slate-200/80 bg-slate-50/70">
-            <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-              <Label className="px-1 text-[11px] font-medium text-slate-500">当前批次</Label>
+          <div className="hidden border-t border-zinc-200/90 bg-zinc-50/80 p-3 sm:block">
+            <div className="rounded-lg border border-zinc-200 bg-white p-2 shadow-sm shadow-zinc-950/[0.04]">
+              <Label className="px-1 text-[11px] font-bold text-zinc-500">当前批次</Label>
               <Select value={currentBatchId} onValueChange={setCurrentBatchId}>
-                <SelectTrigger className="h-9 text-xs mt-1 rounded-md border-slate-200 bg-slate-50 shadow-none">
+                <SelectTrigger className="mt-1 h-9 rounded-md border-zinc-200 bg-zinc-50 text-xs font-semibold shadow-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -941,28 +943,28 @@ export default function WorkflowApp() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-[#f6f7fb]">
-        <div className="sticky top-0 z-20 flex min-h-14 items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-6 py-2 backdrop-blur">
+      <main className="min-w-0 flex-1 overflow-auto bg-[#eef2f6]">
+        <div className="sticky top-0 z-20 flex min-h-14 items-center justify-between gap-3 border-b border-zinc-200/90 bg-[#fbfcff]/95 px-3 py-2 shadow-sm shadow-zinc-950/[0.03] backdrop-blur sm:gap-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-800 shadow-sm">
               <activeNavEntry.item.icon className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-medium text-slate-400">{activeNavEntry.group}</div>
-              <div className="truncate text-sm font-semibold text-slate-950">{activeNavEntry.item.label}</div>
+              <div className="text-[11px] font-bold text-zinc-400">{activeNavEntry.group}</div>
+              <div className="truncate text-[15px] font-extrabold text-zinc-950">{activeNavEntry.item.label}</div>
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-2">
-            <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 xl:flex">
+            <div className="hidden items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 shadow-inner shadow-zinc-950/[0.03] xl:flex">
               {TOP_SHORTCUTS.map(shortcut => (
                 <button
                   key={shortcut.id}
                   type="button"
                   onClick={() => handleTabChange(shortcut.id)}
-                  className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-bold transition-colors ${
                     activeTab === shortcut.id
-                      ? 'bg-white text-slate-950 shadow-sm'
-                      : 'text-slate-500 hover:bg-white hover:text-slate-950'
+                      ? 'bg-white text-zinc-950 shadow-sm'
+                      : 'text-zinc-500 hover:bg-white hover:text-zinc-950'
                   }`}
                 >
                   <shortcut.icon className="h-3.5 w-3.5" />
@@ -973,13 +975,13 @@ export default function WorkflowApp() {
             <Button
               variant="outline"
               size="sm"
-              className="hidden h-9 rounded-lg border-slate-200 bg-white text-xs shadow-sm lg:inline-flex"
+              className="hidden h-9 rounded-lg border-zinc-200 bg-white text-xs shadow-sm lg:inline-flex"
               onClick={refreshAll}
             >
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               刷新
             </Button>
-            <div className="hidden max-w-[340px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 md:flex">
+            <div className="hidden max-w-[340px] items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm md:flex">
               <PackageOpen className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
                 {currentBatch ? `${currentBatch.gameName} - ${currentBatch.batchName}` : '暂无当前批次'}
