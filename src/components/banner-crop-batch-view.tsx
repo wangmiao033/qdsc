@@ -491,30 +491,51 @@ export default function BannerCropBatchView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 space-y-5 min-[1440px]:px-6">
-      <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-            <Layers className="h-5 w-5 text-foreground" />
-            Banner 一键出包
-            <Badge className="border-red-600 bg-red-600 text-white text-[10px] hover:bg-red-600">
-              测试中
-            </Badge>
-          </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            多张母版一次上传，自动匹配分类、批量生成并打包；该流程还需 1-2 轮复核优化
-          </p>
+    <div className="mx-auto w-full max-w-[1600px] space-y-5 px-3 py-4 sm:px-4 sm:py-5 min-[1440px]:px-6">
+      <div className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] p-4 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge className="border-red-600 bg-red-600 text-[10px] font-bold text-white hover:bg-red-600">
+                测试中
+              </Badge>
+              <Badge variant="outline" className="border-zinc-200 bg-white text-[10px] font-bold text-zinc-600">
+                自动匹配母版
+              </Badge>
+            </div>
+            <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-zinc-950">
+              <Layers className="h-5 w-5 text-zinc-900" />
+              Banner 一键出包
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
+              多张母版一次上传，自动匹配分类、批量生成并打包；该流程还需 1-2 轮复核优化。
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-lg border-zinc-200 bg-white text-xs font-bold shadow-sm lg:self-start"
+            onClick={resetAll}
+            disabled={sources.length === 0 && outputs.length === 0}
+          >
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            重置全部
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 rounded-lg border-border/80"
-          onClick={resetAll}
-          disabled={sources.length === 0 && outputs.length === 0}
-        >
-          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-          重置全部
-        </Button>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-4">
+          {[
+            { label: '母版原图', value: sources.length, tone: 'text-zinc-950' },
+            { label: '覆盖分类', value: `${coveredGroupIds.size}/${MASTER_GROUPS.length}`, tone: 'text-emerald-700' },
+            { label: '预计输出', value: totalOutputCount, tone: 'text-blue-700' },
+            { label: '需复核', value: packageWarnings.length, tone: packageWarnings.length > 0 ? 'text-red-700' : 'text-zinc-950' },
+          ].map(item => (
+            <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+              <div className={`font-mono text-xl font-extrabold tabular-nums ${item.tone}`}>{item.value}</div>
+              <div className="text-[11px] font-bold text-zinc-500">{item.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {conflictGroupIds.size > 0 && (
@@ -538,21 +559,21 @@ export default function BannerCropBatchView() {
 
       <div className="grid grid-cols-1 gap-5 min-[1440px]:grid-cols-[300px_minmax(0,1fr)] min-[1728px]:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-4 min-[1440px]:sticky min-[1440px]:top-4 min-[1440px]:self-start">
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Upload className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Upload className="h-4 w-4 text-zinc-500" />
                 批量上传母版
               </CardTitle>
-              <CardDescription className="text-xs">多选或拖拽，每张按宽高比独立匹配</CardDescription>
+              <CardDescription className="text-xs font-medium">多选或拖拽，每张按宽高比独立匹配</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div
                 className={cn(
-                  'relative border border-dashed rounded-xl p-4 text-center transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'relative rounded-lg border border-dashed p-5 text-center transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   isDragging
-                    ? 'border-foreground bg-muted/50'
-                    : 'border-border hover:border-foreground/40 hover:bg-muted/30',
+                    ? 'border-zinc-950 bg-zinc-100'
+                    : 'border-zinc-300 bg-white hover:border-zinc-500 hover:bg-zinc-50',
                   isReading ? 'opacity-70 pointer-events-none' : 'cursor-pointer'
                 )}
                 onDragEnter={handleDragEnter}
@@ -583,20 +604,20 @@ export default function BannerCropBatchView() {
                 <div className="pointer-events-none">
                   {isReading ? (
                     <>
-                      <Loader2 className="h-7 w-7 mx-auto text-foreground animate-spin" />
-                      <div className="text-sm font-medium mt-2">读取中 {readProgress}</div>
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-zinc-900" />
+                      <div className="mt-2 text-sm font-bold">读取中 {readProgress}</div>
                     </>
                   ) : sources.length > 0 ? (
                     <>
-                      <ImagePlus className="h-7 w-7 mx-auto text-foreground/70" />
-                      <div className="text-sm font-medium mt-2">已添加 {sources.length} 张母版</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">点击或拖入可继续添加</div>
+                      <ImagePlus className="mx-auto h-8 w-8 text-zinc-700" />
+                      <div className="mt-2 text-sm font-bold">已添加 {sources.length} 张母版</div>
+                      <div className="mt-0.5 text-xs font-medium text-zinc-500">点击或拖入可继续添加</div>
                     </>
                   ) : (
                     <>
-                      <Upload className="h-7 w-7 mx-auto text-muted-foreground" />
-                      <div className="text-sm font-medium mt-2">拖入多张母版原图</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">PNG / JPG / WebP / GIF / BMP</div>
+                      <Upload className="mx-auto h-8 w-8 text-zinc-500" />
+                      <div className="mt-2 text-sm font-bold text-zinc-900">拖入多张母版原图</div>
+                      <div className="mt-0.5 text-xs font-medium text-zinc-500">PNG / JPG / WebP / GIF / BMP</div>
                     </>
                   )}
                 </div>
@@ -631,7 +652,7 @@ export default function BannerCropBatchView() {
               )}
 
               {sources.length > 0 && (
-                <div className="flex items-stretch divide-x divide-border rounded-lg border border-border/80 bg-muted/20 text-center">
+                <div className="flex items-stretch divide-x divide-zinc-200 rounded-lg border border-zinc-200 bg-white text-center shadow-sm">
                   <div className="flex-1 py-2 px-1">
                     <div className="text-base font-semibold tabular-nums">{sources.length}</div>
                     <div className="text-[10px] text-muted-foreground">母版原图</div>
@@ -649,10 +670,10 @@ export default function BannerCropBatchView() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Settings2 className="h-4 w-4 text-zinc-500" />
                 裁剪设置
               </CardTitle>
             </CardHeader>
@@ -722,7 +743,7 @@ export default function BannerCropBatchView() {
                 </div>
               )}
 
-              <div className="rounded-xl border border-red-600/35 bg-red-50/80 p-3 text-red-950 dark:bg-red-950/25 dark:text-red-100">
+              <div className="rounded-lg border border-red-600/35 bg-red-50/80 p-3 text-red-950 dark:bg-red-950/25 dark:text-red-100">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <Zap className="h-4 w-4 shrink-0" />
@@ -800,27 +821,27 @@ export default function BannerCropBatchView() {
           </Card>
         </div>
 
-        <div className="space-y-4 min-w-0">
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+        <div className="min-w-0 space-y-4">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-sm font-medium">原图队列</CardTitle>
-                <Badge variant="secondary" className="text-[10px] font-normal">
+                <CardTitle className="text-sm font-bold">原图队列</CardTitle>
+                <Badge variant="secondary" className="text-[10px] font-bold">
                   已覆盖 {coveredGroupIds.size}/{MASTER_GROUPS.length} 类
                 </Badge>
               </div>
-              <CardDescription className="text-xs">
+              <CardDescription className="text-xs font-medium">
                 按母版分类排序；每张仅生成其匹配分类下的全部目标尺寸
               </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {sources.length === 0 ? (
-                <div className="py-14 text-center space-y-2">
-                  <p className="text-sm text-muted-foreground">上传多张不同比例的母版原图</p>
-                  <p className="text-xs text-muted-foreground/80">
-                    例如 1920×1080 横版、1024×1024 方图、1080×1920 竖版
-                  </p>
-                </div>
+                  <div className="space-y-2 rounded-lg border border-dashed border-zinc-300 bg-white py-14 text-center">
+                    <p className="text-sm font-bold text-zinc-700">上传多张不同比例的母版原图</p>
+                    <p className="text-xs font-medium text-zinc-500">
+                      例如 1920×1080 横版、1024×1024 方图、1080×1920 竖版
+                    </p>
+                  </div>
               ) : (
                 <div className="space-y-2 max-h-[min(480px,50vh)] overflow-y-auto pr-1">
                   {sourcePlans.map(({ source, group, matchKind }, index) => {
@@ -830,10 +851,10 @@ export default function BannerCropBatchView() {
                       <div
                         key={source.id}
                         className={cn(
-                          'flex items-center gap-3 rounded-xl border p-2.5 transition-colors',
+                          'flex items-center gap-3 rounded-lg border p-2.5 shadow-sm transition-colors',
                           hasConflict
-                            ? 'border-amber-600/35 bg-amber-50/30 dark:bg-amber-950/20'
-                            : 'border-border/80 bg-card'
+                            ? 'border-amber-600/35 bg-amber-50/50 dark:bg-amber-950/20'
+                            : 'border-zinc-200 bg-white'
                         )}
                       >
                         <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0 text-center tabular-nums">
@@ -845,8 +866,8 @@ export default function BannerCropBatchView() {
                           className="h-14 w-14 rounded-lg object-cover border shrink-0 bg-muted"
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-medium truncate" title={source.name}>{source.name}</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                          <div className="truncate text-xs font-bold text-zinc-900" title={source.name}>{source.name}</div>
+                          <div className="mt-0.5 text-[10px] font-medium tabular-nums text-zinc-500">
                             {source.width}×{source.height} · {formatBytes(source.size)}
                           </div>
                           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -856,8 +877,8 @@ export default function BannerCropBatchView() {
                             <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', SOURCE_MATCH_STYLES[matchKind])}>
                               {SOURCE_MATCH_LABELS[matchKind]}
                             </Badge>
-                            <span className="text-[10px] text-muted-foreground truncate">{group.label}</span>
-                            <span className="text-[10px] text-muted-foreground">→ {groupSizes.length} 尺寸</span>
+                            <span className="truncate text-[10px] font-medium text-zinc-500">{group.label}</span>
+                            <span className="text-[10px] font-medium text-zinc-500">→ {groupSizes.length} 尺寸</span>
                             {hasConflict && (
                               <span className="text-[9px] text-amber-700 dark:text-amber-400 flex items-center gap-0.5">
                                 <AlertTriangle className="h-3 w-3" />
@@ -883,38 +904,38 @@ export default function BannerCropBatchView() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-red-600/30 bg-red-50/45 shadow-sm dark:bg-red-950/15">
+          <Card className="rounded-lg border border-red-600/30 bg-red-50/60 shadow-[0_10px_28px_rgba(220,38,38,0.08)] dark:bg-red-950/15">
             <CardHeader className="px-4 pt-4 pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2 text-red-950 dark:text-red-100">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold text-red-950 dark:text-red-100">
                   <Zap className="h-4 w-4" />
                   一键出包测试清单
                 </CardTitle>
-                <Badge className="border-red-600 bg-red-600 text-[10px] text-white hover:bg-red-600">
+                <Badge className="border-red-600 bg-red-600 text-[10px] font-bold text-white hover:bg-red-600">
                   测试标红
                 </Badge>
               </div>
-              <CardDescription className="text-xs text-red-900/75 dark:text-red-200/75">
+              <CardDescription className="text-xs font-medium text-red-900/75 dark:text-red-200/75">
                 当前阶段用于快速整包，仍需人工复核比例匹配和缺失母版
               </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
-                  <div className="text-lg font-semibold tabular-nums">{coveredGroupIds.size}</div>
-                  <div className="text-[10px] text-muted-foreground">已覆盖母版</div>
+                <div className="rounded-lg border border-red-600/20 bg-white/80 p-2 shadow-sm">
+                  <div className="font-mono text-lg font-extrabold tabular-nums">{coveredGroupIds.size}</div>
+                  <div className="text-[10px] font-bold text-zinc-500">已覆盖母版</div>
                 </div>
-                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
-                  <div className="text-lg font-semibold tabular-nums text-red-600">{missingGroups.length}</div>
-                  <div className="text-[10px] text-muted-foreground">缺母版</div>
+                <div className="rounded-lg border border-red-600/20 bg-white/80 p-2 shadow-sm">
+                  <div className="font-mono text-lg font-extrabold tabular-nums text-red-600">{missingGroups.length}</div>
+                  <div className="text-[10px] font-bold text-zinc-500">缺母版</div>
                 </div>
-                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
-                  <div className="text-lg font-semibold tabular-nums">{matchStats.master + matchStats.size}</div>
-                  <div className="text-[10px] text-muted-foreground">精确/尺寸命中</div>
+                <div className="rounded-lg border border-red-600/20 bg-white/80 p-2 shadow-sm">
+                  <div className="font-mono text-lg font-extrabold tabular-nums">{matchStats.master + matchStats.size}</div>
+                  <div className="text-[10px] font-bold text-zinc-500">精确/尺寸命中</div>
                 </div>
-                <div className="rounded-lg border border-red-600/20 bg-background/70 p-2">
-                  <div className="text-lg font-semibold tabular-nums text-red-600">{matchStats.ratio}</div>
-                  <div className="text-[10px] text-muted-foreground">比例匹配</div>
+                <div className="rounded-lg border border-red-600/20 bg-white/80 p-2 shadow-sm">
+                  <div className="font-mono text-lg font-extrabold tabular-nums text-red-600">{matchStats.ratio}</div>
+                  <div className="text-[10px] font-bold text-zinc-500">比例匹配</div>
                 </div>
               </div>
 
@@ -953,12 +974,12 @@ export default function BannerCropBatchView() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pt-4 pb-2">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <CardTitle className="text-sm font-medium">母版分类覆盖</CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
+                  <CardTitle className="text-sm font-bold">母版分类覆盖</CardTitle>
+                  <CardDescription className="mt-0.5 text-xs font-medium">
                     与单张模式共用 {MASTER_GROUPS.length} 类规格 · 绿=已有母版
                   </CardDescription>
                 </div>
@@ -1017,7 +1038,7 @@ export default function BannerCropBatchView() {
                     <div
                       key={group.id}
                       className={cn(
-                        'rounded-xl border p-3 text-left text-[11px]',
+                        'rounded-lg border p-3 text-left text-[11px]',
                         hasMaster
                           ? hasConflict
                             ? 'border-amber-600/35 bg-amber-50/50 dark:bg-amber-950/25'
@@ -1057,11 +1078,11 @@ export default function BannerCropBatchView() {
           </Card>
 
           {outputs.length > 0 && (
-            <Card className="rounded-xl border border-border/80 shadow-sm">
+            <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
               <CardHeader className="px-4 pt-4 pb-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-medium">生成结果</CardTitle>
+                    <CardTitle className="text-sm font-bold">生成结果</CardTitle>
                     <CardDescription className="text-xs">
                       {outputs.length} 个文件 · {formatBytes(totalOutputSize)} · ZIP 平铺于 {outputFormat}/，命名 宽×高.{outputFormat}
                     </CardDescription>

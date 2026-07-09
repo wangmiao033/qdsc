@@ -629,46 +629,65 @@ export default function BannerMasterPackView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 space-y-5 min-[1440px]:px-6">
-      <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-4">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Package className="h-5 w-5 text-foreground" />
-            Banner 母版配对
-            <Badge className="border-sky-600 bg-sky-600 text-[10px] text-white hover:bg-sky-600">第一期 07</Badge>
-            <Badge className="border-sky-600 bg-sky-600 text-[10px] text-white hover:bg-sky-600">M1-M8</Badge>
-          </h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            只按指定母版源尺寸或文件名 M1-M8 配对，支持 M4/M6/M7 派生输出，并在出包前做尺寸与安全区体检
-          </p>
+    <div className="mx-auto w-full max-w-[1600px] space-y-5 px-3 py-4 sm:px-4 sm:py-5 min-[1440px]:px-6">
+      <div className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] p-4 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge className="border-sky-600 bg-sky-600 text-[10px] font-bold text-white hover:bg-sky-600">第一期 07</Badge>
+              <Badge className="border-sky-600 bg-sky-600 text-[10px] font-bold text-white hover:bg-sky-600">M1-M8</Badge>
+              <Badge variant="outline" className="border-zinc-200 bg-white text-[10px] font-bold text-zinc-600">安全区体检</Badge>
+            </div>
+            <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-zinc-950">
+              <Package className="h-5 w-5 text-zinc-900" />
+              Banner 母版配对
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
+              只按指定母版源尺寸或文件名 M1-M8 配对，支持 M4/M6/M7 派生输出，并在出包前做尺寸与安全区体检。
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-lg border-zinc-200 bg-white text-xs font-bold shadow-sm lg:self-start"
+            onClick={resetAll}
+            disabled={sources.length === 0 && outputs.length === 0}
+          >
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            重置全部
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 rounded-lg border-border/80"
-          onClick={resetAll}
-          disabled={sources.length === 0 && outputs.length === 0}
-        >
-          <RefreshCw className="mr-1 h-3.5 w-3.5" />
-          重置全部
-        </Button>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-4">
+          {[
+            { label: '已配对', value: `${coveredRows.length}/8`, tone: 'text-emerald-700' },
+            { label: '派生输出', value: derivedRows.length, tone: derivedRows.length > 0 ? 'text-amber-700' : 'text-zinc-950' },
+            { label: '预计输出', value: totalOutputCount, tone: 'text-blue-700' },
+            { label: '需复核', value: reviewIssueCount, tone: reviewIssueCount > 0 ? 'text-red-700' : 'text-zinc-950' },
+          ].map(item => (
+            <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+              <div className={`font-mono text-xl font-extrabold tabular-nums ${item.tone}`}>{item.value}</div>
+              <div className="text-[11px] font-bold text-zinc-500">{item.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 min-[1440px]:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-4 min-[1440px]:sticky min-[1440px]:top-20 min-[1440px]:self-start">
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pb-2 pt-4">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Upload className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Upload className="h-4 w-4 text-zinc-500" />
                 上传 M1-M8 母版
               </CardTitle>
-              <CardDescription className="text-xs">建议文件名包含 M1 / M2 / M3 ...，同尺寸歧义会优先按文件名</CardDescription>
+              <CardDescription className="text-xs font-medium">建议文件名包含 M1 / M2 / M3 ...，同尺寸歧义会优先按文件名</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 px-4 pb-4">
               <div
                 className={cn(
-                  'relative rounded-xl border border-dashed p-4 text-center outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring',
-                  isDragging ? 'border-foreground bg-muted/50' : 'border-border hover:border-foreground/40 hover:bg-muted/30',
+                  'relative rounded-lg border border-dashed p-5 text-center outline-none transition-all focus-visible:ring-2 focus-visible:ring-ring',
+                  isDragging ? 'border-zinc-950 bg-zinc-100' : 'border-zinc-300 bg-white hover:border-zinc-500 hover:bg-zinc-50',
                   isReading ? 'pointer-events-none opacity-70' : 'cursor-pointer'
                 )}
                 onClick={() => inputRef.current?.click()}
@@ -700,20 +719,20 @@ export default function BannerMasterPackView() {
                 />
                 {isReading ? (
                   <>
-                    <Loader2 className="mx-auto h-7 w-7 animate-spin text-foreground" />
-                    <div className="mt-2 text-sm font-medium">读取中 {readProgress}</div>
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-zinc-900" />
+                    <div className="mt-2 text-sm font-bold">读取中 {readProgress}</div>
                   </>
                 ) : sources.length > 0 ? (
                   <>
-                    <ImagePlus className="mx-auto h-7 w-7 text-foreground/70" />
-                    <div className="mt-2 text-sm font-medium">已添加 {sources.length} 张母版</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">点击或拖入可继续添加</div>
+                    <ImagePlus className="mx-auto h-8 w-8 text-zinc-700" />
+                    <div className="mt-2 text-sm font-bold">已添加 {sources.length} 张母版</div>
+                    <div className="mt-0.5 text-xs font-medium text-zinc-500">点击或拖入可继续添加</div>
                   </>
                 ) : (
                   <>
-                    <Upload className="mx-auto h-7 w-7 text-muted-foreground" />
-                    <div className="mt-2 text-sm font-medium">拖入 M1-M8 母版原图</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">PNG / JPG / WebP / GIF / BMP</div>
+                    <Upload className="mx-auto h-8 w-8 text-zinc-500" />
+                    <div className="mt-2 text-sm font-bold text-zinc-900">拖入 M1-M8 母版原图</div>
+                    <div className="mt-0.5 text-xs font-medium text-zinc-500">PNG / JPG / WebP / GIF / BMP</div>
                   </>
                 )}
               </div>
@@ -762,10 +781,10 @@ export default function BannerMasterPackView() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pb-2 pt-4">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                <Settings2 className="h-4 w-4 text-zinc-500" />
                 输出设置
               </CardTitle>
             </CardHeader>
@@ -842,7 +861,7 @@ export default function BannerMasterPackView() {
 
         <div className="min-w-0 space-y-4">
           {(missingRows.length > 0 || derivedRows.length > 0 || riskyRows.length > 0 || unassigned.length > 0 || duplicateMatches.length > 0) && (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-600/30 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-600/30 bg-amber-50/70 px-3 py-2 text-xs font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>缺 {missingRows.length} 类</span>
               <span>派生 {derivedRows.length} 类</span>
@@ -852,17 +871,17 @@ export default function BannerMasterPackView() {
             </div>
           )}
 
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pb-2 pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="flex items-center gap-2 text-sm font-bold">
+                  <ShieldCheck className="h-4 w-4 text-zinc-500" />
                   本期 07 体检
                 </CardTitle>
                 <Badge
                   variant="outline"
                   className={cn(
-                    'text-[10px] font-normal',
+                    'text-[10px] font-bold',
                     hardIssueCount > 0
                       ? 'border-red-600/35 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-200'
                       : reviewIssueCount > 0
@@ -876,7 +895,7 @@ export default function BannerMasterPackView() {
             </CardHeader>
             <CardContent className="space-y-2 px-4 pb-4">
               {reviewIssueCount === 0 ? (
-                <div className="rounded-lg border border-emerald-600/25 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200">
+                <div className="rounded-lg border border-emerald-600/25 bg-emerald-50/60 px-3 py-2 text-xs font-medium text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200">
                   当前上传内容没有发现缺母版、错误尺寸、重复匹配或高风险裁剪。
                 </div>
               ) : (
@@ -915,14 +934,14 @@ export default function BannerMasterPackView() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border border-border/80 shadow-sm">
+          <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
             <CardHeader className="px-4 pb-2 pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <CardTitle className="text-sm font-medium">M1-M8 母版配对表</CardTitle>
-                  <CardDescription className="mt-0.5 text-xs">绿=独立母版命中，黄=派生，红=缺母版或裁剪风险高</CardDescription>
+                  <CardTitle className="text-sm font-bold">M1-M8 母版配对表</CardTitle>
+                  <CardDescription className="mt-0.5 text-xs font-medium">绿=独立母版命中，黄=派生，红=缺母版或裁剪风险高</CardDescription>
                 </div>
-                <Badge variant="secondary" className="text-[10px] font-normal">
+                <Badge variant="secondary" className="text-[10px] font-bold">
                   {coveredRows.length}/8 已配对
                 </Badge>
               </div>
@@ -935,23 +954,23 @@ export default function BannerMasterPackView() {
                   <div
                     key={row.spec.code}
                     className={cn(
-                      'rounded-xl border p-3',
+                      'rounded-lg border p-3 shadow-sm',
                       row.state === 'missing'
-                        ? 'border-red-600/30 bg-red-50/45 dark:bg-red-950/15'
+                        ? 'border-red-600/30 bg-red-50/55 dark:bg-red-950/15'
                         : row.state === 'derived'
-                          ? 'border-amber-600/30 bg-amber-50/45 dark:bg-amber-950/15'
-                          : 'border-emerald-600/25 bg-emerald-50/45 dark:bg-emerald-950/15'
+                          ? 'border-amber-600/30 bg-amber-50/55 dark:bg-amber-950/15'
+                          : 'border-emerald-600/25 bg-emerald-50/55 dark:bg-emerald-950/15'
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className="font-mono text-[10px]">{row.spec.code}</Badge>
-                          <span className="text-sm font-semibold">{row.spec.title}</span>
-                          <span className="text-[10px] text-muted-foreground">源 {row.spec.sourceLabel}</span>
+                          <span className="text-sm font-bold text-zinc-950">{row.spec.title}</span>
+                          <span className="text-[10px] font-medium text-zinc-500">源 {row.spec.sourceLabel}</span>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{row.spec.description}</p>
-                        {row.spec.note && <p className="mt-1 text-[10px] text-muted-foreground">{row.spec.note}</p>}
+                        <p className="mt-1 text-xs font-medium text-zinc-600">{row.spec.description}</p>
+                        {row.spec.note && <p className="mt-1 text-[10px] font-medium text-zinc-500">{row.spec.note}</p>}
                         {safetyZones.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {safetyZones.map(zone => (
@@ -985,7 +1004,7 @@ export default function BannerMasterPackView() {
                     </div>
 
                     <div className="mt-3 grid gap-2 min-[1000px]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                      <div className="rounded-lg border border-border/70 bg-background/70 p-2">
+                      <div className="rounded-lg border border-zinc-200 bg-white/80 p-2 shadow-sm">
                         {row.source ? (
                           <div className="flex items-center gap-2">
                             <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border bg-muted">
@@ -1000,17 +1019,17 @@ export default function BannerMasterPackView() {
                               ))}
                             </div>
                             <div className="min-w-0">
-                              <div className="truncate text-xs font-medium" title={row.source.name}>{row.source.name}</div>
-                              <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{sourceSize} · {formatBytes(row.source.size)}</div>
+                              <div className="truncate text-xs font-bold text-zinc-900" title={row.source.name}>{row.source.name}</div>
+                              <div className="mt-0.5 font-mono text-[10px] font-medium text-zinc-500">{sourceSize} · {formatBytes(row.source.size)}</div>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex h-12 items-center text-xs text-muted-foreground">等待上传 {row.spec.code} 母版</div>
+                          <div className="flex h-12 items-center text-xs font-medium text-zinc-500">等待上传 {row.spec.code} 母版</div>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-1 rounded-lg border border-border/70 bg-background/70 p-2">
+                      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-white/80 p-2 shadow-sm">
                         {row.targets.map(target => (
-                          <span key={target.key} className="rounded-md border border-border/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                          <span key={target.key} className="rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-zinc-600">
                             {target.label}
                           </span>
                         ))}
@@ -1034,21 +1053,21 @@ export default function BannerMasterPackView() {
           </Card>
 
           {sources.length > 0 && (
-            <Card className="rounded-xl border border-border/80 shadow-sm">
+            <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
               <CardHeader className="px-4 pb-2 pt-4">
-                <CardTitle className="text-sm font-medium">上传队列</CardTitle>
+                <CardTitle className="text-sm font-bold">上传队列</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-2 px-4 pb-4 sm:grid-cols-2 min-[1440px]:grid-cols-3">
                 {sources.map(source => {
                   const assignedRows = rows.filter(row => row.source?.id === source.id)
                   const overwrittenMatch = duplicateMatches.find(match => match.previous.id === source.id)
                   return (
-                    <div key={source.id} className="flex items-center gap-2 rounded-lg border border-border/80 p-2">
+                    <div key={source.id} className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white p-2 shadow-sm">
                       <img src={source.previewUrl} alt="" className="h-12 w-12 shrink-0 rounded-md border bg-muted object-cover" />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium" title={source.name}>{source.name}</div>
-                        <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{source.width}x{source.height}</div>
-                        <div className="mt-1 text-[10px] text-muted-foreground">
+                        <div className="truncate text-xs font-bold text-zinc-900" title={source.name}>{source.name}</div>
+                        <div className="mt-0.5 font-mono text-[10px] font-medium text-zinc-500">{source.width}x{source.height}</div>
+                        <div className="mt-1 text-[10px] font-medium text-zinc-500">
                           {assignedRows.length > 0
                             ? `匹配 ${assignedRows.map(row => row.spec.code).join(' / ')}`
                             : overwrittenMatch
@@ -1067,11 +1086,11 @@ export default function BannerMasterPackView() {
           )}
 
           {outputs.length > 0 && (
-            <Card className="rounded-xl border border-border/80 shadow-sm">
+            <Card className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] shadow-sm">
               <CardHeader className="px-4 pb-2 pt-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <CardTitle className="text-sm font-medium">生成结果</CardTitle>
+                    <CardTitle className="text-sm font-bold">生成结果</CardTitle>
                     <CardDescription className="text-xs">{outputs.length} 个文件 · {formatBytes(totalOutputSize)}</CardDescription>
                   </div>
                   <Button variant="outline" size="sm" className="h-8 rounded-lg border-border/80 text-xs" onClick={() => void saveOutputsZip(outputs)} disabled={isZipping}>

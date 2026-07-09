@@ -1099,12 +1099,24 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
 
   if (!batchId || batches.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center space-y-4">
-          <ListChecks className="h-12 w-12 text-muted-foreground mx-auto" />
-          <h2 className="text-lg font-semibold">暂无批次</h2>
-          <p className="text-sm text-muted-foreground">请先在「任务生成器」中创建一个批次</p>
-          <Button onClick={() => onRefresh()}>刷新</Button>
+      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center p-4">
+        <div className="w-full max-w-xl rounded-lg border border-zinc-200/90 bg-[#fbfcff] p-6 text-center shadow-[0_16px_42px_rgba(15,23,42,0.08)]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-zinc-950 text-white shadow-md shadow-zinc-950/15">
+            <ListChecks className="h-7 w-7" />
+          </div>
+          <h2 className="mt-5 text-xl font-extrabold text-zinc-950">暂无批次</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm font-medium leading-relaxed text-zinc-500">
+            请先在「任务生成器」中创建一个批次，创建后这里会显示任务总览、渠道进度和验收状态。
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Button className="h-9 rounded-lg font-bold" onClick={() => onRefresh()}>
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              刷新
+            </Button>
+            <Button variant="outline" className="h-9 rounded-lg bg-white font-bold" onClick={() => onBatchChange(batches[0]?.id || '')} disabled={batches.length === 0}>
+              选择已有批次
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -1114,74 +1126,170 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
 
   const { stats, channelGroups, recentAcceptance } = data
   const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+  const inProgressCount = stats.inProgress || 0
+  const unresolvedCount = stats.pending + inProgressCount + stats.error
+  const statCards = [
+    {
+      label: '总任务',
+      value: stats.total,
+      hint: '当前批次全部规格',
+      icon: ListChecks,
+      color: 'text-zinc-900',
+      iconBg: 'bg-zinc-950 text-white',
+    },
+    {
+      label: '已完成',
+      value: stats.completed,
+      hint: `${completionRate}% 完成率`,
+      icon: CheckCircle2,
+      color: 'text-emerald-700',
+      iconBg: 'bg-emerald-100 text-emerald-700',
+    },
+    {
+      label: '制作中',
+      value: inProgressCount,
+      hint: '正在推进',
+      icon: Clock,
+      color: 'text-blue-700',
+      iconBg: 'bg-blue-100 text-blue-700',
+    },
+    {
+      label: '待制作',
+      value: stats.pending,
+      hint: '还未开始',
+      icon: Clock,
+      color: 'text-amber-700',
+      iconBg: 'bg-amber-100 text-amber-700',
+    },
+    {
+      label: '异常',
+      value: stats.error,
+      hint: stats.error > 0 ? '需要优先处理' : '暂无异常',
+      icon: AlertTriangle,
+      color: 'text-red-700',
+      iconBg: 'bg-red-100 text-red-700',
+    },
+  ]
 
   return (
-    <div className="p-4 space-y-4 max-w-7xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{data.batch.gameName} - {data.batch.batchName}</h2>
-          <p className="text-sm text-muted-foreground">批次概览与进度跟踪</p>
+    <div className="max-w-7xl space-y-4 p-3 sm:p-4">
+      <div className="rounded-lg border border-zinc-200/90 bg-[#fbfcff] p-4 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="border-zinc-200 bg-zinc-50 text-[10px] font-bold text-zinc-600">
+                当前批次
+              </Badge>
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-bold ${
+                  stats.error > 0
+                    ? 'border-red-600/35 bg-red-50 text-red-700'
+                    : unresolvedCount > 0
+                      ? 'border-amber-600/35 bg-amber-50 text-amber-800'
+                      : 'border-emerald-600/35 bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {stats.error > 0 ? '有异常' : unresolvedCount > 0 ? '进行中' : '已完成'}
+              </Badge>
+            </div>
+            <h2 className="truncate text-xl font-extrabold tracking-tight text-zinc-950">
+              {data.batch.gameName} - {data.batch.batchName}
+            </h2>
+            <p className="mt-1 text-sm font-medium text-zinc-500">批次概览、进度追踪和验收风险集中查看</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="h-9 bg-white text-xs font-bold" onClick={copyTaskList}>
+              {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+              {copied ? '已复制' : '复制任务清单'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 bg-white text-xs font-bold"
+              onClick={() => { setData(null); fetch('/api/dashboard?batchId=' + batchId).then(r => r.json()).then(d => setData(d)) }}
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              刷新
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={copyTaskList}>
-            {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-            {copied ? '已复制' : '复制任务清单'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => { setData(null); fetch('/api/dashboard?batchId=' + batchId).then(r => r.json()).then(d => setData(d)) }}>
-            刷新
-          </Button>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="font-bold text-zinc-800">总体完成率</span>
+              <span className="font-mono text-lg font-bold text-zinc-950">{completionRate}%</span>
+            </div>
+            <Progress value={completionRate} className="h-2.5" />
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 bg-white text-center shadow-sm">
+            <div className="px-2 py-2">
+              <div className="font-mono text-lg font-bold text-zinc-950">{unresolvedCount}</div>
+              <div className="text-[10px] font-semibold text-zinc-500">待推进</div>
+            </div>
+            <div className="px-2 py-2">
+              <div className="font-mono text-lg font-bold text-emerald-700">{stats.completed}</div>
+              <div className="text-[10px] font-semibold text-zinc-500">已交付</div>
+            </div>
+            <div className="px-2 py-2">
+              <div className="font-mono text-lg font-bold text-red-700">{stats.error}</div>
+              <div className="text-[10px] font-semibold text-zinc-500">异常</div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: '总任务', value: stats.total, icon: ListChecks, color: 'text-foreground' },
-          { label: '已完成', value: stats.completed, icon: CheckCircle2, color: 'text-emerald-600' },
-          { label: '制作中', value: stats.inProgress || 0, icon: Clock, color: 'text-blue-600' },
-          { label: '待制作', value: stats.pending, icon: Clock, color: 'text-amber-600' },
-          { label: '异常', value: stats.error, icon: AlertTriangle, color: 'text-red-600' },
-        ].map(s => (
-          <Card key={s.label} className="p-3">
-            <div className="flex items-center gap-2">
-              <s.icon className={`h-4 w-4 ${s.color}`} />
-              <span className="text-xs text-muted-foreground">{s.label}</span>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {statCards.map(s => (
+          <Card key={s.label} className="overflow-hidden p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-zinc-500">{s.label}</span>
+                <div className={`mt-1 font-mono text-3xl font-extrabold tabular-nums ${s.color}`}>{s.value}</div>
+              </div>
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.iconBg}`}>
+                <s.icon className="h-4 w-4" />
+              </span>
             </div>
-            <div className="text-2xl font-bold mt-1">{s.value}</div>
+            <p className="mt-2 truncate text-[11px] font-semibold text-zinc-500">{s.hint}</p>
           </Card>
         ))}
       </div>
 
-      {/* Overall progress */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium">总体完成率</span>
-          <span className="text-sm font-bold">{completionRate}%</span>
-        </div>
-        <Progress value={completionRate} className="h-2" />
-      </Card>
-
       {/* Channel Progress */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm">按渠道分组进度</CardTitle>
+        <CardHeader className="px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">按渠道分组进度</CardTitle>
+              <CardDescription className="mt-1 text-xs">扫描每个渠道的完成率和异常数量</CardDescription>
+            </div>
+            <Badge variant="outline" className="bg-zinc-50 text-[10px] font-bold text-zinc-600">
+              {Object.keys(channelGroups).length} 个渠道
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(channelGroups).map(([channel, g]) => {
               const rate = g.total > 0 ? Math.round((g.completed / g.total) * 100) : 0
               return (
-                <div key={channel} className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
+                <div key={channel} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium truncate">{channel}</span>
-                      <span className="text-xs text-muted-foreground">{g.completed}/{g.total}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-bold text-zinc-900">{channel}</span>
+                      <span className="font-mono text-xs font-bold text-zinc-500">{g.completed}/{g.total}</span>
                     </div>
-                    <Progress value={rate} className="h-1.5 mt-1" />
+                    <div className="mt-2 flex items-center gap-2">
+                      <Progress value={rate} className="h-1.5 flex-1" />
+                      <span className="w-9 text-right font-mono text-[11px] font-bold text-zinc-500">{rate}%</span>
+                    </div>
                   </div>
                   {g.error > 0 && (
-                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">
-                      {g.error}
+                    <Badge variant="destructive" className="mt-2 text-[10px] font-bold">
+                      异常 {g.error}
                     </Badge>
                   )}
                 </div>
