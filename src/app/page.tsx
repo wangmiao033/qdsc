@@ -170,6 +170,57 @@ const TOP_SHORTCUTS = [
   { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
 ] as const
 
+const PRODUCT_CHANGELOG = [
+  {
+    version: '第一期 07',
+    date: '2026-07-09',
+    title: '工作台信息整合',
+    status: '已更新',
+    summary: '合并重复统计卡片，批次进度、待推进、已交付和异常状态集中到顶部面板。',
+    items: [
+      '左侧栏底部批次下拉改为当前批次摘要，避免窄侧栏里出现重复控件。',
+      '顶部栏批次标签升级为真正的批次切换入口。',
+      '渠道进度改为按异常、完成率和任务量排序，更适合优先处理。',
+    ],
+  },
+  {
+    version: '第一期 07',
+    date: '2026-07-09',
+    title: 'Banner 裁剪升级',
+    status: '测试中',
+    summary: '围绕母版出图、一键出包和素材尺寸匹配做了第一轮升级。',
+    items: [
+      'Banner 裁剪增加一键出包测试入口，并用测试状态标红提示。',
+      '整理 M1-M8 母版和尺寸配对，减少硬裁造成的画面缺失。',
+      '增加母版匹配说明，优先按贴合比例和安全区关系输出素材。',
+    ],
+  },
+  {
+    version: '第一期 07',
+    date: '2026-07-09',
+    title: '全站 UI 迭代',
+    status: '已更新',
+    summary: '优化字体粗细、卡片层级、工具页头部和主导航视觉密度。',
+    items: [
+      '侧栏、顶部栏、工作台、Banner 工具组统一圆角、阴影和文字权重。',
+      '强化关键数字的可读性，降低浅灰小字造成的信息弱化。',
+      '素材工具页增加更清晰的模式切换和状态说明。',
+    ],
+  },
+  {
+    version: '基础修复',
+    date: '2026-07-09',
+    title: 'Vercel 构建修复',
+    status: '已上线',
+    summary: '补齐 Next.js 项目结构和构建脚本，解决线上无法识别 app/pages 目录的问题。',
+    items: [
+      '补齐 Next.js 依赖和 App Router 入口。',
+      '修复 Vercel 构建命令，保证生产环境可正常发布。',
+      '清理旧项目残留后重新推送到 qdsc 仓库。',
+    ],
+  },
+] as const
+
 function getInitialViewFromBrowser() {
   if (typeof window === 'undefined') return 'dashboard'
 
@@ -920,23 +971,32 @@ export default function WorkflowApp() {
             </div>
           )}
         </nav>
-        {/* Batch selector */}
+        {/* Current batch summary */}
         {batches.length > 0 && (
           <div className="hidden border-t border-zinc-200/90 bg-zinc-50/80 p-3 sm:block">
-            <div className="rounded-lg border border-zinc-200 bg-white p-2 shadow-sm shadow-zinc-950/[0.04]">
-              <Label className="px-1 text-[11px] font-bold text-zinc-500">当前批次</Label>
-              <Select value={currentBatchId} onValueChange={setCurrentBatchId}>
-                <SelectTrigger className="mt-1 h-9 rounded-md border-zinc-200 bg-zinc-50 text-xs font-semibold shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {batches.map(b => (
-                    <SelectItem key={b.id} value={b.id} className="text-xs">
-                      {b.gameName} - {b.batchName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-sm shadow-zinc-950/[0.04]">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="px-0 text-[11px] font-bold text-zinc-500">当前批次</Label>
+                <Badge variant="outline" className="h-5 bg-zinc-50 px-1.5 text-[10px] font-bold text-zinc-500">
+                  {batches.length} 个
+                </Badge>
+              </div>
+              <div className="mt-2 flex items-start gap-2 rounded-md border border-zinc-100 bg-zinc-50 px-2 py-2">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white">
+                  <PackageOpen className="h-3.5 w-3.5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-extrabold text-zinc-950">
+                    {currentBatch?.gameName || '暂无批次'}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] font-semibold text-zinc-500">
+                    {currentBatch?.batchName || '请先创建批次'}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] font-semibold text-zinc-400">
+                批次切换已整合到顶部栏
+              </div>
             </div>
           </div>
         )}
@@ -981,12 +1041,26 @@ export default function WorkflowApp() {
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               刷新
             </Button>
-            <div className="hidden max-w-[340px] items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm md:flex">
-              <PackageOpen className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">
-                {currentBatch ? `${currentBatch.gameName} - ${currentBatch.batchName}` : '暂无当前批次'}
-              </span>
-            </div>
+            {batches.length > 0 ? (
+              <Select value={currentBatchId} onValueChange={setCurrentBatchId}>
+                <SelectTrigger className="hidden h-9 w-[280px] rounded-lg border-zinc-200 bg-white text-xs font-bold text-zinc-700 shadow-sm md:flex">
+                  <PackageOpen className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <SelectValue placeholder="选择批次" />
+                </SelectTrigger>
+                <SelectContent className="max-w-[360px]">
+                  {batches.map(b => (
+                    <SelectItem key={b.id} value={b.id} className="text-xs font-semibold">
+                      {b.gameName} - {b.batchName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="hidden h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-500 shadow-sm md:flex">
+                <PackageOpen className="h-3.5 w-3.5 shrink-0" />
+                暂无当前批次
+              </div>
+            )}
           </div>
         </div>
         {activeTab === 'dashboard' && (
@@ -1128,11 +1202,15 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
   const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
   const inProgressCount = stats.inProgress || 0
   const unresolvedCount = stats.pending + inProgressCount + stats.error
-  const statCards = [
+  const nextStepText = stats.error > 0
+    ? `先处理 ${stats.error} 个异常任务`
+    : unresolvedCount > 0
+      ? `继续推进 ${unresolvedCount} 个待处理任务`
+      : '当前批次已全部完成'
+  const dashboardMetrics = [
     {
       label: '总任务',
       value: stats.total,
-      hint: '当前批次全部规格',
       icon: ListChecks,
       color: 'text-zinc-900',
       iconBg: 'bg-zinc-950 text-white',
@@ -1140,7 +1218,6 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
     {
       label: '已完成',
       value: stats.completed,
-      hint: `${completionRate}% 完成率`,
       icon: CheckCircle2,
       color: 'text-emerald-700',
       iconBg: 'bg-emerald-100 text-emerald-700',
@@ -1148,7 +1225,6 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
     {
       label: '制作中',
       value: inProgressCount,
-      hint: '正在推进',
       icon: Clock,
       color: 'text-blue-700',
       iconBg: 'bg-blue-100 text-blue-700',
@@ -1156,7 +1232,6 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
     {
       label: '待制作',
       value: stats.pending,
-      hint: '还未开始',
       icon: Clock,
       color: 'text-amber-700',
       iconBg: 'bg-amber-100 text-amber-700',
@@ -1164,12 +1239,24 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
     {
       label: '异常',
       value: stats.error,
-      hint: stats.error > 0 ? '需要优先处理' : '暂无异常',
       icon: AlertTriangle,
       color: 'text-red-700',
       iconBg: 'bg-red-100 text-red-700',
     },
   ]
+  const channelEntries = Object.entries(channelGroups)
+    .map(([channel, g]) => ({
+      channel,
+      ...g,
+      rate: g.total > 0 ? Math.round((g.completed / g.total) * 100) : 0,
+      openCount: g.pending + g.inProgress + g.error,
+    }))
+    .sort((a, b) =>
+      b.error - a.error ||
+      a.rate - b.rate ||
+      b.total - a.total ||
+      a.channel.localeCompare(b.channel, 'zh-CN')
+    )
 
   return (
     <div className="max-w-7xl space-y-4 p-3 sm:p-4">
@@ -1215,47 +1302,34 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_520px]">
           <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="font-bold text-zinc-800">总体完成率</span>
               <span className="font-mono text-lg font-bold text-zinc-950">{completionRate}%</span>
             </div>
             <Progress value={completionRate} className="h-2.5" />
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
+              <span className="rounded-md bg-zinc-100 px-2 py-1 text-zinc-700">下一步</span>
+              <span>{nextStepText}</span>
+            </div>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 bg-white text-center shadow-sm">
-            <div className="px-2 py-2">
-              <div className="font-mono text-lg font-bold text-zinc-950">{unresolvedCount}</div>
-              <div className="text-[10px] font-semibold text-zinc-500">待推进</div>
-            </div>
-            <div className="px-2 py-2">
-              <div className="font-mono text-lg font-bold text-emerald-700">{stats.completed}</div>
-              <div className="text-[10px] font-semibold text-zinc-500">已交付</div>
-            </div>
-            <div className="px-2 py-2">
-              <div className="font-mono text-lg font-bold text-red-700">{stats.error}</div>
-              <div className="text-[10px] font-semibold text-zinc-500">异常</div>
-            </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-5">
+            {dashboardMetrics.map(metric => (
+              <div key={metric.label} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-zinc-500">{metric.label}</span>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${metric.iconBg}`}>
+                    <metric.icon className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className={`mt-2 font-mono text-2xl font-extrabold tabular-nums ${metric.color}`}>
+                  {metric.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {statCards.map(s => (
-          <Card key={s.label} className="overflow-hidden p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-xs font-bold text-zinc-500">{s.label}</span>
-                <div className={`mt-1 font-mono text-3xl font-extrabold tabular-nums ${s.color}`}>{s.value}</div>
-              </div>
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.iconBg}`}>
-                <s.icon className="h-4 w-4" />
-              </span>
-            </div>
-            <p className="mt-2 truncate text-[11px] font-semibold text-zinc-500">{s.hint}</p>
-          </Card>
-        ))}
       </div>
 
       {/* Channel Progress */}
@@ -1263,38 +1337,40 @@ function DashboardView({ batchId, batches, onBatchChange, onRefresh }: {
         <CardHeader className="px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-sm">按渠道分组进度</CardTitle>
-              <CardDescription className="mt-1 text-xs">扫描每个渠道的完成率和异常数量</CardDescription>
+              <CardTitle className="text-sm">渠道推进队列</CardTitle>
+              <CardDescription className="mt-1 text-xs">按异常、低完成率和任务量排序，优先处理最需要推进的渠道</CardDescription>
             </div>
             <Badge variant="outline" className="bg-zinc-50 text-[10px] font-bold text-zinc-600">
-              {Object.keys(channelGroups).length} 个渠道
+              {channelEntries.length} 个渠道
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="px-4 pb-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(channelGroups).map(([channel, g]) => {
-              const rate = g.total > 0 ? Math.round((g.completed / g.total) * 100) : 0
-              return (
-                <div key={channel} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-bold text-zinc-900">{channel}</span>
-                      <span className="font-mono text-xs font-bold text-zinc-500">{g.completed}/{g.total}</span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Progress value={rate} className="h-1.5 flex-1" />
-                      <span className="w-9 text-right font-mono text-[11px] font-bold text-zinc-500">{rate}%</span>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {channelEntries.map(g => (
+              <div key={g.channel} className={`rounded-lg border bg-white p-3 shadow-sm ${
+                g.error > 0 ? 'border-red-200 ring-1 ring-red-100' : 'border-zinc-200'
+              }`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-zinc-950">{g.channel}</div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-bold">
+                      <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600">总 {g.total}</span>
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">完成 {g.completed}</span>
+                      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">待 {g.openCount}</span>
+                      {g.error > 0 && (
+                        <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">异常 {g.error}</span>
+                      )}
                     </div>
                   </div>
-                  {g.error > 0 && (
-                    <Badge variant="destructive" className="mt-2 text-[10px] font-bold">
-                      异常 {g.error}
-                    </Badge>
-                  )}
+                  <div className="font-mono text-sm font-extrabold text-zinc-900">{g.rate}%</div>
                 </div>
-              )
-            })}
+                <div className="mt-3 flex items-center gap-2">
+                  <Progress value={g.rate} className="h-1.5 flex-1" />
+                  <span className="font-mono text-[11px] font-bold text-zinc-500">{g.completed}/{g.total}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -3190,19 +3266,81 @@ function LogsView({ batchId, onRefresh }: {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-5xl">
+    <div className="max-w-6xl space-y-4 p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">更新日志</h2>
-          <p className="text-xs text-muted-foreground">素材操作轨迹追踪 · 共 {total} 条记录</p>
+          <h2 className="text-xl font-extrabold text-zinc-950">更新日志</h2>
+          <p className="mt-1 text-xs font-semibold text-zinc-500">产品更新记录 + 批次操作轨迹</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => fetchLogs(actionFilter)}>
+          <Button variant="outline" size="sm" className="h-8 bg-white text-xs font-bold" onClick={() => fetchLogs(actionFilter)}>
             <RefreshCw className="h-3 w-3 mr-1" />刷新
           </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs text-red-500" onClick={handleClear}>
-            <Trash2 className="h-3 w-3 mr-1" />清空
+          <Button variant="outline" size="sm" className="h-8 bg-white text-xs font-bold text-red-600" onClick={handleClear}>
+            <Trash2 className="h-3 w-3 mr-1" />清空操作轨迹
           </Button>
+        </div>
+      </div>
+
+      <Card className="overflow-hidden border-zinc-200/90 bg-[#fbfcff] shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
+        <CardHeader className="px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">产品更新</CardTitle>
+              <CardDescription className="mt-1 text-xs">这里记录系统功能和 UI 的更新，不会随批次操作日志清空</CardDescription>
+            </div>
+            <Badge variant="outline" className="border-zinc-200 bg-white text-[10px] font-bold text-zinc-600">
+              {PRODUCT_CHANGELOG.length} 条
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="space-y-3">
+            {PRODUCT_CHANGELOG.map((entry, index) => (
+              <div key={`${entry.version}-${entry.title}`} className="relative rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+                {index === 0 && (
+                  <div className="absolute right-3 top-3 rounded-md bg-zinc-950 px-2 py-1 text-[10px] font-bold text-white">
+                    最新
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 pr-12">
+                  <Badge variant="outline" className="border-zinc-200 bg-zinc-50 text-[10px] font-bold text-zinc-600">
+                    {entry.version}
+                  </Badge>
+                  <span className="text-xs font-bold text-zinc-400">{entry.date}</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-bold ${
+                      entry.status === '测试中'
+                        ? 'border-red-200 bg-red-50 text-red-700'
+                        : entry.status === '已上线'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-blue-200 bg-blue-50 text-blue-700'
+                    }`}
+                  >
+                    {entry.status}
+                  </Badge>
+                </div>
+                <div className="mt-2 text-sm font-extrabold text-zinc-950">{entry.title}</div>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-zinc-500">{entry.summary}</p>
+                <div className="mt-3 grid gap-1.5 sm:grid-cols-3">
+                  {entry.items.map(item => (
+                    <div key={item} className="flex gap-1.5 rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] font-semibold leading-relaxed text-zinc-600">
+                      <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-extrabold text-zinc-950">操作轨迹</h3>
+          <p className="mt-1 text-xs font-semibold text-zinc-500">素材、任务、验收和导入导出记录 · 共 {total} 条</p>
         </div>
       </div>
 
@@ -3210,7 +3348,7 @@ function LogsView({ batchId, onRefresh }: {
       <div className="flex flex-wrap gap-1.5">
         <Badge
           variant={actionFilter === 'all' ? 'default' : 'outline'}
-          className="text-xs cursor-pointer"
+          className="cursor-pointer text-xs"
           onClick={() => handleFilter('all')}
         >
           全部 ({total})
@@ -3221,7 +3359,7 @@ function LogsView({ batchId, onRefresh }: {
             <Badge
               key={key}
               variant={actionFilter === key ? 'default' : 'outline'}
-              className="text-xs cursor-pointer"
+              className="cursor-pointer text-xs"
               onClick={() => handleFilter(key)}
             >
               {cfg.icon} {cfg.label} ({actionCounts[key] || 0})
@@ -3235,8 +3373,8 @@ function LogsView({ batchId, onRefresh }: {
       ) : logs.length === 0 ? (
         <Card className="p-8 text-center">
           <ScrollText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">暂无操作日志</p>
-          <p className="text-xs text-muted-foreground mt-1">开始使用系统后，操作记录会在这里显示</p>
+          <p className="text-sm font-semibold text-zinc-500">暂无操作轨迹</p>
+          <p className="text-xs text-muted-foreground mt-1">任务生成、状态变更、素材验收等批次操作会显示在这里</p>
         </Card>
       ) : (
         <div className="space-y-4 max-h-[calc(100vh-280px)] overflow-auto">
