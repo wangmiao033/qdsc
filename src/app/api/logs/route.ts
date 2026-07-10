@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { requireAdminAction } from '@/lib/admin-auth'
 import { NextRequest, NextResponse } from 'next/server'
 
 // 记录一条日志
@@ -46,6 +47,9 @@ export async function GET(req: NextRequest) {
 
 // 清空日志
 export async function DELETE(req: NextRequest) {
+  const authError = requireAdminAction(req)
+  if (authError) return authError
+
   const searchParams = req.nextUrl.searchParams
   const batchId = searchParams.get('batchId')
 

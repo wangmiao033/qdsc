@@ -41,6 +41,7 @@ import QuickResizeView from '@/components/quick-resize-view'
 import ProductionBoardView from '@/components/production-board-view'
 import SizeBasedWorkflowView from '@/components/size-based-workflow-view'
 import AssetTransitStationView from '@/components/asset-transit-station-view'
+import { PRODUCT_CHANGELOG } from '@/data/product-changelog'
 
 // ========== Types ==========
 interface MaterialSpec {
@@ -170,57 +171,6 @@ const TOP_SHORTCUTS = [
   { id: 'acceptance', label: '素材验收', icon: ClipboardCheck },
 ] as const
 
-const PRODUCT_CHANGELOG = [
-  {
-    version: '第一期 07',
-    date: '2026-07-09',
-    title: '工作台信息整合',
-    status: '已更新',
-    summary: '合并重复统计卡片，批次进度、待推进、已交付和异常状态集中到顶部面板。',
-    items: [
-      '左侧栏底部批次下拉改为当前批次摘要，避免窄侧栏里出现重复控件。',
-      '顶部栏批次标签升级为真正的批次切换入口。',
-      '渠道进度改为按异常、完成率和任务量排序，更适合优先处理。',
-    ],
-  },
-  {
-    version: '第一期 07',
-    date: '2026-07-09',
-    title: 'Banner 裁剪升级',
-    status: '测试中',
-    summary: '围绕母版出图、一键出包和素材尺寸匹配做了第一轮升级。',
-    items: [
-      'Banner 裁剪增加一键出包测试入口，并用测试状态标红提示。',
-      '整理 M1-M8 母版和尺寸配对，减少硬裁造成的画面缺失。',
-      '增加母版匹配说明，优先按贴合比例和安全区关系输出素材。',
-    ],
-  },
-  {
-    version: '第一期 07',
-    date: '2026-07-09',
-    title: '全站 UI 迭代',
-    status: '已更新',
-    summary: '优化字体粗细、卡片层级、工具页头部和主导航视觉密度。',
-    items: [
-      '侧栏、顶部栏、工作台、Banner 工具组统一圆角、阴影和文字权重。',
-      '强化关键数字的可读性，降低浅灰小字造成的信息弱化。',
-      '素材工具页增加更清晰的模式切换和状态说明。',
-    ],
-  },
-  {
-    version: '基础修复',
-    date: '2026-07-09',
-    title: 'Vercel 构建修复',
-    status: '已上线',
-    summary: '补齐 Next.js 项目结构和构建脚本，解决线上无法识别 app/pages 目录的问题。',
-    items: [
-      '补齐 Next.js 依赖和 App Router 入口。',
-      '修复 Vercel 构建命令，保证生产环境可正常发布。',
-      '清理旧项目残留后重新推送到 qdsc 仓库。',
-    ],
-  },
-] as const
-
 function getInitialViewFromBrowser() {
   if (typeof window === 'undefined') return 'dashboard'
 
@@ -332,6 +282,7 @@ interface DashboardData {
 }
 
 const emptySpecsData = { items: [] as MaterialSpec[], total: 0, channels: [] as string[] }
+const ADMIN_ACTION_HEADER = 'x-qdsc-admin-token'
 
 async function readJsonOrNull<T>(res: Response): Promise<T | null> {
   if (!res.ok) return null
@@ -341,6 +292,34 @@ async function readJsonOrNull<T>(res: Response): Promise<T | null> {
     console.error('[qdsc] failed to parse JSON response', error)
     return null
   }
+}
+
+async function readResponseError(res: Response) {
+  try {
+    const data = await res.json()
+    if (data?.error) return String(data.error)
+  } catch {
+    // ignore malformed error payload
+  }
+  return `请求失败 (${res.status})`
+}
+
+function promptAdminToken(actionName: string) {
+  if (typeof window === 'undefined') return null
+  const value = window.prompt(`${actionName}\n请输入管理口令（环境变量 QDSC_ADMIN_TOKEN）：`)
+  return value?.trim() || null
+}
+
+function adminHeaders(token: string) {
+  return { [ADMIN_ACTION_HEADER]: token }
+}
+
+function getActiveNavEntry(activeTab: string) {
+  for (const group of NAV_GROUPS) {
+    const item = group.items.find(navItem => navItem.id === activeTab)
+    if (item) return { group: group.label, item }
+  }
+  return { group: '总览', item: NAV_GROUPS[0].items[0] }
 }
 
 function normalizeSpecsData(data: unknown): typeof emptySpecsData {
@@ -885,13 +864,7 @@ export default function WorkflowApp() {
       .filter(group => group.items.length > 0)
   }, [navSearch])
 
-  const activeNavEntry = useMemo(() => {
-    for (const group of NAV_GROUPS) {
-      const item = group.items.find(navItem => navItem.id === activeTab)
-      if (item) return { group: group.label, item }
-    }
-    return { group: '总览', item: NAV_GROUPS[0].items[0] }
-  }, [activeTab])
+  const activeNavEntry = getActiveNavEntry(activeTab)
 
   const currentBatch = useMemo(
     () => batches.find(batch => batch.id === currentBatchId),
@@ -1546,14 +1519,32 @@ function SpecsView({ specsData, onRefresh }: {
 
   const handleClear = async () => {
     if (!confirm('将清空所有数据（规格、批次、任务、验收记录），是否继续？')) return
-    await fetch('/api/specs/clear', { method: 'DELETE' })
+    const token = promptAdminToken('清空所有素材规格、批次、任务和验收记录')
+    if (!token) return
+    const res = await fetch('/api/specs/clear', {
+      method: 'DELETE',
+      headers: adminHeaders(token),
+    })
+    if (!res.ok) {
+      alert(await readResponseError(res))
+      return
+    }
     reloadSpecs()
     onRefresh()
   }
 
   const handleSeed = async () => {
     if (!confirm('将导入演示数据，是否继续？')) return
-    await fetch('/api/seed', { method: 'POST' })
+    const token = promptAdminToken('导入演示数据')
+    if (!token) return
+    const res = await fetch('/api/seed', {
+      method: 'POST',
+      headers: adminHeaders(token),
+    })
+    if (!res.ok) {
+      alert(await readResponseError(res))
+      return
+    }
     reloadSpecs()
     onRefresh()
   }
@@ -1966,7 +1957,7 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
     return result
   })()
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     if (!batchId) return
     try {
       const res = await fetch(`/api/tasks?batchId=${batchId}`)
@@ -1976,9 +1967,12 @@ function TasksView({ batchId, channels, specs, onRefresh, onBatchChange }: {
       console.error('[qdsc] failed to load tasks', error)
       setTasks([])
     }
-  }
+  }, [batchId])
 
-  useEffect(() => { fetchTasks() }, [batchId])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchTasks() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchTasks])
 
   const toggleChannel = (ch: string) => {
     setSelectedChannels(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch])
@@ -2632,7 +2626,8 @@ function AcceptanceView({ batchId, onRefresh }: {
   }, [batchId])
 
   useEffect(() => {
-    fetchBatchProgress()
+    const timer = window.setTimeout(() => { void fetchBatchProgress() }, 0)
+    return () => window.clearTimeout(timer)
   }, [fetchBatchProgress])
 
   const addFiles = (fileList: FileList | File[]) => {
@@ -3220,7 +3215,7 @@ function LogsView({ batchId, onRefresh }: {
     other: { label: '其他', color: 'bg-gray-100 text-gray-700', icon: '📌' },
   }
 
-  const fetchLogs = async (filter?: string) => {
+  const fetchLogs = useCallback(async (filter?: string) => {
     setLoading(true)
     const params = new URLSearchParams({ limit: '200' })
     if (batchId && batchId !== 'undefined') params.set('batchId', batchId)
@@ -3230,9 +3225,12 @@ function LogsView({ batchId, onRefresh }: {
     setLogs(data.logs || [])
     setTotal(data.total || 0)
     setLoading(false)
-  }
+  }, [batchId])
 
-  useEffect(() => { fetchLogs() }, [batchId])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchLogs() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchLogs])
 
   const handleFilter = (action: string) => {
     setActionFilter(action)
@@ -3241,8 +3239,17 @@ function LogsView({ batchId, onRefresh }: {
 
   const handleClear = async () => {
     if (!confirm('确定清空日志？')) return
+    const token = promptAdminToken(batchId ? '清空当前批次操作轨迹' : '清空全部操作轨迹')
+    if (!token) return
     const params = batchId ? `?batchId=${batchId}` : ''
-    await fetch(`/api/logs${params}`, { method: 'DELETE' })
+    const res = await fetch(`/api/logs${params}`, {
+      method: 'DELETE',
+      headers: adminHeaders(token),
+    })
+    if (!res.ok) {
+      alert(await readResponseError(res))
+      return
+    }
     fetchLogs(actionFilter)
     onRefresh()
   }

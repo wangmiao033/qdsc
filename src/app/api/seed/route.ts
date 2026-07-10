@@ -1,7 +1,12 @@
 import { db } from '@/lib/db'
+import { requireAdminAction } from '@/lib/admin-auth'
+import { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const authError = requireAdminAction(req)
+  if (authError) return authError
+
   // Seed some demo data
   const channels = ['抖音', '微信', '快手', 'B站', '小红书', 'TapTap', 'App Store', 'Google Play']
   const materialTypes = [

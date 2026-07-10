@@ -237,7 +237,10 @@ export default function ProductionBoardView({
     }
   }, [])
 
-  useEffect(() => { loadBoardData() }, [loadBoardData])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadBoardData() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadBoardData])
 
   // Load tasks when step 3 or 4
   useEffect(() => {

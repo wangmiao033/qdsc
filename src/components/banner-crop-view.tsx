@@ -558,52 +558,58 @@ export default function BannerCropView() {
 
   useEffect(() => {
     if (outputScope !== 'autoMaster' || sources.length === 0) return
-    const matchedGroup = findBestMasterGroup(sources[0])
-    setActiveMasterGroupId(prev => prev === matchedGroup.id ? prev : matchedGroup.id)
-    setSelectedSizes(new Set(matchedGroup.sizes))
+    const timer = window.setTimeout(() => {
+      const matchedGroup = findBestMasterGroup(sources[0])
+      setActiveMasterGroupId(prev => prev === matchedGroup.id ? prev : matchedGroup.id)
+      setSelectedSizes(new Set(matchedGroup.sizes))
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [sources, outputScope])
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('qdsc_banner_crop_sizes')
-      if (!stored) return
-      const sizes: Array<{ width: number; height: number; format?: string }> = JSON.parse(stored)
-      if (!Array.isArray(sizes) || sizes.length === 0) return
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = localStorage.getItem('qdsc_banner_crop_sizes')
+        if (!stored) return
+        const sizes: Array<{ width: number; height: number; format?: string }> = JSON.parse(stored)
+        if (!Array.isArray(sizes) || sizes.length === 0) return
 
-      const importedSizes: BannerSize[] = sizes
-        .filter(size => size.width > 0 && size.height > 0)
-        .map(size => ({
-          key: `${size.width}x${size.height}`,
-          width: size.width,
-          height: size.height,
-          label: `${size.width}x${size.height}`,
-        }))
+        const importedSizes: BannerSize[] = sizes
+          .filter(size => size.width > 0 && size.height > 0)
+          .map(size => ({
+            key: `${size.width}x${size.height}`,
+            width: size.width,
+            height: size.height,
+            label: `${size.width}x${size.height}`,
+          }))
 
-      if (importedSizes.length === 0) return
+        if (importedSizes.length === 0) return
 
-      setExtraSizes(prev => {
-        const existingKeys = new Set(prev.map(size => size.key))
-        const unique = importedSizes.filter(size => !existingKeys.has(size.key))
-        return unique.length > 0 ? [...prev, ...unique] : prev
-      })
-      setOutputScope('manual')
-      setSelectedSizes(prev => {
-        const next = new Set(prev)
-        importedSizes.forEach(size => next.add(size.key))
-        return next
-      })
+        setExtraSizes(prev => {
+          const existingKeys = new Set(prev.map(size => size.key))
+          const unique = importedSizes.filter(size => !existingKeys.has(size.key))
+          return unique.length > 0 ? [...prev, ...unique] : prev
+        })
+        setOutputScope('manual')
+        setSelectedSizes(prev => {
+          const next = new Set(prev)
+          importedSizes.forEach(size => next.add(size.key))
+          return next
+        })
 
-      const firstFormat = parseStoredOutputFormat(sizes.find(size => size.format)?.format)
-      if (firstFormat) setOutputFormat(firstFormat)
+        const firstFormat = parseStoredOutputFormat(sizes.find(size => size.format)?.format)
+        if (firstFormat) setOutputFormat(firstFormat)
 
-      localStorage.removeItem('qdsc_banner_crop_sizes')
-      toast({
-        title: `已加载 ${importedSizes.length} 个预设尺寸`,
-        description: '来自生产看板的 Banner 尺寸已添加到输出列表',
-      })
-    } catch {
-      /* ignore */
-    }
+        localStorage.removeItem('qdsc_banner_crop_sizes')
+        toast({
+          title: `已加载 ${importedSizes.length} 个预设尺寸`,
+          description: '来自生产看板的 Banner 尺寸已添加到输出列表',
+        })
+      } catch {
+        /* ignore */
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [toast])
 
   const clearOutputs = () => {
