@@ -15,12 +15,20 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 
 type ResizeMode = 'cover' | 'contain' | 'stretch'
 type OutputFormat = 'png' | 'jpeg' | 'webp'
 type BackgroundMode = 'transparent' | 'white' | 'black' | 'custom'
 type NamingMode = 'suffix' | 'replace'
+type ZipGroupMode = 'bySize' | 'byFile' | 'flat'
+
+interface TargetSize {
+  key: string
+  width: number
+  height: number
+}
 
 interface SourceImage {
   id: string
@@ -37,7 +45,9 @@ interface SourceImage {
 interface ResizeOutput {
   id: string
   sourceId: string
+  sourceBaseName: string
   name: string
+  targetKey: string
   width: number
   height: number
   format: OutputFormat
@@ -59,13 +69,33 @@ const FORMAT_LABELS: Record<OutputFormat, string> = {
 
 const SIZE_PRESETS = [
   '512x512',
+  '720x350',
+  '840x400',
+  '930x440',
+  '1200x534',
   '800x450',
   '1080x608',
   '1280x720',
+  '1952x1048',
   '1920x1080',
   '750x1334',
   '1080x1920',
   '1024x1024',
+]
+
+const SIZE_PRESET_GROUPS = [
+  {
+    label: '常用横版',
+    sizes: ['800x450', '1280x720', '1920x1080'],
+  },
+  {
+    label: 'M2 / MuMu / 当乐',
+    sizes: ['1952x1048', '720x350', '840x400', '930x440', '1200x534'],
+  },
+  {
+    label: '竖版投放',
+    sizes: ['750x1334', '1080x1920'],
+  },
 ]
 
 function getBaseName(name: string) {
@@ -161,12 +191,63 @@ function sanitizeArchiveName(name: string) {
     .trim()
 }
 
+function parseSizeToken(value: string): TargetSize | null {
+  const match = value.trim().match(/^(\d{2,5})\s*[xX*×]\s*(\d{2,5})$/)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!width || !height) return null
+  return { key: `${width}x${height}`, width, height }
+}
+
+function parseSizeText(value: string) {
+  const used = new Set<string>()
+  const sizes: TargetSize[] = []
+  for (const match of value.matchAll(/(\d{2,5})\s*[xX*×]\s*(\d{2,5})/g)) {
+    const size = parseSizeToken(`${match[1]}x${match[2]}`)
+    if (!size || used.has(size.key)) continue
+    used.add(size.key)
+    sizes.push(size)
+  }
+  return sizes
+}
+
+function sortSizeKey(a: string, b: string) {
+  const [aw, ah] = a.split('x').map(Number)
+  const [bw, bh] = b.split('x').map(Number)
+  return aw - bw || ah - bh
+}
+
+function getUniquePath(path: string, usedPaths: Set<string>) {
+  if (!usedPaths.has(path)) {
+    usedPaths.add(path)
+    return path
+  }
+  const slashIndex = path.lastIndexOf('/')
+  const folder = slashIndex >= 0 ? path.slice(0, slashIndex + 1) : ''
+  const fileName = slashIndex >= 0 ? path.slice(slashIndex + 1) : path
+  const dotIndex = fileName.lastIndexOf('.')
+  const stem = dotIndex >= 0 ? fileName.slice(0, dotIndex) : fileName
+  const ext = dotIndex >= 0 ? fileName.slice(dotIndex) : ''
+  let index = 2
+  let nextPath = `${folder}${stem} (${index})${ext}`
+  while (usedPaths.has(nextPath)) {
+    index += 1
+    nextPath = `${folder}${stem} (${index})${ext}`
+  }
+  usedPaths.add(nextPath)
+  console.info('[QuickResize] duplicated zip path renamed', { originalPath: path, outputPath: nextPath })
+  return nextPath
+}
+
 export default function QuickResizeView() {
   const [files, setFiles] = useState<SourceImage[]>([])
   const [outputs, setOutputs] = useState<ResizeOutput[]>([])
   const [failed, setFailed] = useState<FailedImage[]>([])
   const [targetWidth, setTargetWidth] = useState(1920)
   const [targetHeight, setTargetHeight] = useState(1080)
+  const [targetSizes, setTargetSizes] = useState<TargetSize[]>([{ key: '1920x1080', width: 1920, height: 1080 }])
+  const [sizeText, setSizeText] = useState('1920x1080')
   const [resizeMode, setResizeMode] = useState<ResizeMode>('cover')
   const [targetFormat, setTargetFormat] = useState<OutputFormat>('jpeg')
   const [quality, setQuality] = useState(92)
@@ -175,6 +256,7 @@ export default function QuickResizeView() {
   const [namingMode, setNamingMode] = useState<NamingMode>('suffix')
   const [suffix, setSuffix] = useState('resize')
   const [zipFileName, setZipFileName] = useState('')
+  const [zipGroupMode, setZipGroupMode] = useState<ZipGroupMode>('bySize')
   const [isDragging, setIsDragging] = useState(false)
   const [isReading, setIsReading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -184,9 +266,10 @@ export default function QuickResizeView() {
   const outputsRef = useRef<ResizeOutput[]>([])
   const { toast } = useToast()
 
-  const totalInputSize = useMemo(() => files.reduce((sum, file) => sum + file.size, 0), [files])
   const totalOutputSize = useMemo(() => outputs.reduce((sum, file) => sum + file.size, 0), [outputs])
   const hasLossyQuality = targetFormat === 'jpeg' || targetFormat === 'webp'
+  const totalOutputCount = files.length * targetSizes.length
+  const targetSizeKeys = useMemo(() => targetSizes.map(size => size.key), [targetSizes])
 
   useEffect(() => { filesRef.current = files }, [files])
   useEffect(() => { outputsRef.current = outputs }, [outputs])
@@ -261,19 +344,66 @@ export default function QuickResizeView() {
     return customBackground
   }
 
-  const getOutputName = (source: SourceImage) => {
-    const ext = getExtension(targetFormat)
-    const cleanSuffix = suffix.trim() || `${targetWidth}x${targetHeight}`
-    return namingMode === 'suffix'
-      ? `${source.baseName}_${cleanSuffix}_${targetWidth}x${targetHeight}.${ext}`
-      : `${source.baseName}.${ext}`
+  const syncTargetSizes = (nextSizes: TargetSize[], options?: { syncText?: boolean }) => {
+    const unique = Array.from(new Map(nextSizes.map(size => [size.key, size])).values())
+      .sort((a, b) => sortSizeKey(a.key, b.key))
+    setTargetSizes(unique)
+    if (unique[0]) {
+      setTargetWidth(unique[0].width)
+      setTargetHeight(unique[0].height)
+    }
+    if (options?.syncText !== false) {
+      setSizeText(unique.map(size => size.key).join('\n'))
+    }
+    clearOutputs()
   }
 
-  const resizeOne = async (source: SourceImage, outputName: string): Promise<ResizeOutput> => {
+  const addTargetSize = (size: TargetSize) => {
+    syncTargetSizes([...targetSizes, size])
+    toast({ title: `已添加尺寸 ${size.key}` })
+  }
+
+  const removeTargetSize = (key: string) => {
+    if (targetSizes.length <= 1) {
+      toast({ title: '至少保留一个输出尺寸', variant: 'destructive' })
+      return
+    }
+    syncTargetSizes(targetSizes.filter(size => size.key !== key))
+  }
+
+  const importSizeText = () => {
+    const parsed = parseSizeText(sizeText)
+    if (parsed.length === 0) {
+      toast({ title: '没有识别到有效尺寸', description: '格式示例：720x350、840×400', variant: 'destructive' })
+      return
+    }
+    syncTargetSizes(parsed, { syncText: true })
+    toast({ title: `已导入 ${parsed.length} 个尺寸` })
+  }
+
+  const applySizeGroup = (sizes: string[]) => {
+    const parsed = sizes.map(parseSizeToken).filter((size): size is TargetSize => Boolean(size))
+    syncTargetSizes(parsed)
+    toast({ title: `已切换为 ${parsed.length} 个尺寸` })
+  }
+
+  const getOutputName = (source: SourceImage, target: TargetSize) => {
+    const ext = getExtension(targetFormat)
+    const cleanSuffix = suffix.trim()
+      ? `${suffix.trim()}_${target.key}`
+      : target.key
+    return namingMode === 'suffix'
+      ? `${source.baseName}_${cleanSuffix}.${ext}`
+      : targetSizes.length > 1
+        ? `${source.baseName}_${target.key}.${ext}`
+        : `${source.baseName}.${ext}`
+  }
+
+  const resizeOne = async (source: SourceImage, target: TargetSize, outputName: string): Promise<ResizeOutput> => {
     const image = await loadImageElement(source.previewUrl)
     const canvas = document.createElement('canvas')
-    canvas.width = targetWidth
-    canvas.height = targetHeight
+    canvas.width = target.width
+    canvas.height = target.height
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas 初始化失败')
 
@@ -287,17 +417,17 @@ export default function QuickResizeView() {
 
     let drawX = 0
     let drawY = 0
-    let drawWidth = targetWidth
-    let drawHeight = targetHeight
+    let drawWidth = target.width
+    let drawHeight = target.height
 
     if (resizeMode !== 'stretch') {
       const scale = resizeMode === 'cover'
-        ? Math.max(targetWidth / source.width, targetHeight / source.height)
-        : Math.min(targetWidth / source.width, targetHeight / source.height)
+        ? Math.max(target.width / source.width, target.height / source.height)
+        : Math.min(target.width / source.width, target.height / source.height)
       drawWidth = source.width * scale
       drawHeight = source.height * scale
-      drawX = (targetWidth - drawWidth) / 2
-      drawY = (targetHeight - drawHeight) / 2
+      drawX = (target.width - drawWidth) / 2
+      drawY = (target.height - drawHeight) / 2
     }
 
     ctx.imageSmoothingEnabled = true
@@ -307,11 +437,13 @@ export default function QuickResizeView() {
     const blob = await canvasToBlob(canvas, getMimeType(targetFormat), quality / 100)
     const url = URL.createObjectURL(blob)
     return {
-      id: `${source.id}-${targetWidth}x${targetHeight}-${targetFormat}`,
+      id: `${source.id}-${target.key}-${targetFormat}`,
       sourceId: source.id,
+      sourceBaseName: source.baseName,
       name: outputName,
-      width: targetWidth,
-      height: targetHeight,
+      targetKey: target.key,
+      width: target.width,
+      height: target.height,
       format: targetFormat,
       size: blob.size,
       blob,
@@ -321,8 +453,8 @@ export default function QuickResizeView() {
 
   const handleResize = async () => {
     if (files.length === 0 || isProcessing) return
-    if (targetWidth <= 0 || targetHeight <= 0) {
-      toast({ title: '请输入有效尺寸', variant: 'destructive' })
+    if (targetSizes.length === 0) {
+      toast({ title: '请至少添加一个输出尺寸', variant: 'destructive' })
       return
     }
 
@@ -332,18 +464,22 @@ export default function QuickResizeView() {
     const usedNames = new Set<string>()
     const nextOutputs: ResizeOutput[] = []
     const nextFailed: FailedImage[] = []
+    const total = files.length * targetSizes.length
+    let completed = 0
 
-    for (let i = 0; i < files.length; i += 1) {
-      const source = files[i]
-      try {
-        const outputName = getUniqueName(getOutputName(source), usedNames)
-        nextOutputs.push(await resizeOne(source, outputName))
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '改图失败'
-        nextFailed.push({ sourceName: source.name, message })
-        console.warn('[QuickResize] skipped resize', { fileName: source.name, reason: message })
-      } finally {
-        setProgress(Math.round(((i + 1) / files.length) * 100))
+    for (const source of files) {
+      for (const target of targetSizes) {
+        try {
+          const outputName = getUniqueName(getOutputName(source, target), usedNames)
+          nextOutputs.push(await resizeOne(source, target, outputName))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '改图失败'
+          nextFailed.push({ sourceName: `${source.name} → ${target.key}`, message })
+          console.warn('[QuickResize] skipped resize', { fileName: source.name, target: target.key, reason: message })
+        } finally {
+          completed += 1
+          setProgress(Math.round((completed / total) * 100))
+        }
       }
     }
 
@@ -364,17 +500,27 @@ export default function QuickResizeView() {
   const downloadZip = async () => {
     if (outputs.length === 0) return
     const zip = new JSZip()
-    outputs.forEach(output => zip.file(output.name, output.blob))
+    const usedPaths = new Set<string>()
+    outputs.forEach(output => {
+      const rawPath = zipGroupMode === 'bySize'
+        ? `${output.targetKey}/${output.name}`
+        : zipGroupMode === 'byFile'
+          ? `${sanitizeArchiveName(output.sourceBaseName) || 'image'}/${output.name}`
+          : output.name
+      zip.file(getUniquePath(rawPath, usedPaths), output.blob)
+    })
     const blob = await zip.generateAsync({ type: 'blob' })
-    const archiveName = sanitizeArchiveName(zipFileName) || `quick_resize_${targetWidth}x${targetHeight}_${outputs.length}files`
+    const sizeTag = targetSizes.length <= 3
+      ? targetSizeKeys.join('+')
+      : `${targetSizes.length}sizes`
+    const archiveName = sanitizeArchiveName(zipFileName) || `quick_resize_${sizeTag}_${outputs.length}files`
     saveAs(blob, `${archiveName}.zip`)
   }
 
   const applyPreset = (preset: string) => {
-    const [width, height] = preset.split('x').map(Number)
-    setTargetWidth(width)
-    setTargetHeight(height)
-    clearOutputs()
+    const size = parseSizeToken(preset)
+    if (!size) return
+    addTargetSize(size)
   }
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -392,7 +538,7 @@ export default function QuickResizeView() {
             <Zap className="h-5 w-5 text-primary" />
             快速改图
           </h2>
-          <p className="text-xs text-muted-foreground">多图一次性改成同一个尺寸，支持裁剪、留边和拉伸</p>
+          <p className="text-xs text-muted-foreground">多图一次性输出多个尺寸，支持裁剪、留边、拉伸和 ZIP 打包</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetAll} disabled={files.length === 0 && outputs.length === 0}>
           <RefreshCw className="h-3.5 w-3.5 mr-1" />
@@ -465,12 +611,12 @@ export default function QuickResizeView() {
                     <div className="text-[10px] text-muted-foreground">图片</div>
                   </Card>
                   <Card className="p-2.5 text-center">
-                    <div className="text-lg font-bold">{outputs.length}</div>
-                    <div className="text-[10px] text-muted-foreground">输出</div>
+                    <div className="text-lg font-bold">{targetSizes.length}</div>
+                    <div className="text-[10px] text-muted-foreground">尺寸</div>
                   </Card>
                   <Card className="p-2.5 text-center">
-                    <div className="text-sm font-bold mt-1">{formatBytes(totalInputSize)}</div>
-                    <div className="text-[10px] text-muted-foreground">原始大小</div>
+                    <div className="text-lg font-bold">{totalOutputCount}</div>
+                    <div className="text-[10px] text-muted-foreground">预计输出</div>
                   </Card>
                 </div>
               )}
@@ -481,9 +627,9 @@ export default function QuickResizeView() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />
-                目标尺寸
+                输出尺寸
               </CardTitle>
-              <CardDescription className="text-xs">所有图片都会输出成这个尺寸</CardDescription>
+              <CardDescription className="text-xs">每张图片都会按已选尺寸各输出一份</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
@@ -515,12 +661,28 @@ export default function QuickResizeView() {
                 </div>
               </div>
 
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-8 text-xs"
+                onClick={() => {
+                  const size = parseSizeToken(`${targetWidth}x${targetHeight}`)
+                  if (!size) {
+                    toast({ title: '请输入有效尺寸', variant: 'destructive' })
+                    return
+                  }
+                  addTargetSize(size)
+                }}
+              >
+                添加 {targetWidth || 0}x{targetHeight || 0}
+              </Button>
+
               <div className="flex flex-wrap gap-1.5">
                 {SIZE_PRESETS.map(preset => (
                   <Button
                     key={preset}
                     type="button"
-                    variant={`${targetWidth}x${targetHeight}` === preset ? 'default' : 'outline'}
+                    variant={targetSizes.some(size => size.key === preset) ? 'default' : 'outline'}
                     size="sm"
                     className="h-7 text-[11px] px-2 font-mono"
                     onClick={() => applyPreset(preset)}
@@ -528,6 +690,69 @@ export default function QuickResizeView() {
                     {preset}
                   </Button>
                 ))}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">尺寸组</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {SIZE_PRESET_GROUPS.map(group => (
+                    <Button
+                      key={group.label}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto justify-between gap-3 rounded-lg px-3 py-2 text-left"
+                      onClick={() => applySizeGroup(group.sizes)}
+                    >
+                      <span>
+                        <span className="block text-xs font-medium">{group.label}</span>
+                        <span className="block text-[10px] text-muted-foreground font-mono">
+                          {group.sizes.join(' / ')}
+                        </span>
+                      </span>
+                      <Badge variant="secondary" className="text-[10px]">{group.sizes.length}</Badge>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">批量尺寸列表</Label>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={importSizeText}>
+                    导入列表
+                  </Button>
+                </div>
+                <Textarea
+                  className="min-h-24 font-mono text-xs"
+                  value={sizeText}
+                  onChange={event => setSizeText(event.target.value)}
+                  placeholder={'720x350\n840x400\n930x440\n1200x534'}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  支持用换行、逗号或空格分隔，例如 720x350、840×400。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">已选尺寸</Label>
+                  <span className="text-[10px] text-muted-foreground">{targetSizes.length} 个</span>
+                </div>
+                <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-muted/20 p-2">
+                  {targetSizes.map(size => (
+                    <button
+                      key={size.key}
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 font-mono text-[11px] hover:border-destructive/50 hover:text-destructive"
+                      onClick={() => removeTargetSize(size.key)}
+                      title="点击移除"
+                    >
+                      {size.key}
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -643,6 +868,23 @@ export default function QuickResizeView() {
                     }}
                   />
                 </div>
+                <p className="text-[10px] text-muted-foreground">
+                  多尺寸输出时会自动带上尺寸，避免同名覆盖。
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">ZIP 分组</Label>
+                <Select value={zipGroupMode} onValueChange={(value) => setZipGroupMode(value as ZipGroupMode)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bySize">按尺寸分组</SelectItem>
+                    <SelectItem value="byFile">按原图分组</SelectItem>
+                    <SelectItem value="flat">不分组</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
@@ -651,7 +893,7 @@ export default function QuickResizeView() {
                   className="h-9 text-xs"
                   value={zipFileName}
                   onChange={event => setZipFileName(event.target.value)}
-                  placeholder={`quick_resize_${targetWidth}x${targetHeight}_${outputs.length || files.length || 0}files`}
+                  placeholder={`quick_resize_${targetSizes.length <= 3 ? targetSizeKeys.join('+') : `${targetSizes.length}sizes`}_${outputs.length || totalOutputCount || 0}files`}
                 />
                 <div className="text-[10px] text-muted-foreground">
                   不用写 .zip；为空时自动按尺寸和文件数命名
@@ -660,7 +902,7 @@ export default function QuickResizeView() {
 
               <Button className="w-full" onClick={handleResize} disabled={files.length === 0 || isProcessing || isReading}>
                 {isProcessing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
-                {isProcessing ? '处理中...' : `批量改图 (${files.length} 个文件)`}
+                {isProcessing ? '处理中...' : `批量改图 (${totalOutputCount} 个输出)`}
               </Button>
               {isProcessing && <Progress value={progress} className="h-2" />}
             </CardContent>
@@ -676,7 +918,9 @@ export default function QuickResizeView() {
                     <ImagePlus className="h-4 w-4" />
                     待处理图片
                   </CardTitle>
-                  <CardDescription className="text-xs">会统一输出为 {targetWidth}x{targetHeight}</CardDescription>
+                  <CardDescription className="text-xs">
+                    {files.length} 张图片 × {targetSizes.length} 个尺寸 = {totalOutputCount} 个输出
+                  </CardDescription>
                 </div>
                 {files.length > 0 && (
                   <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={resetAll}>
@@ -730,7 +974,7 @@ export default function QuickResizeView() {
                       改图结果
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      {outputs.length} 个文件 · {targetWidth}x{targetHeight} · {formatBytes(totalOutputSize)}
+                      {outputs.length} 个文件 · {targetSizes.length} 个尺寸 · {formatBytes(totalOutputSize)}
                     </CardDescription>
                   </div>
                   <Button size="sm" onClick={downloadZip}>
