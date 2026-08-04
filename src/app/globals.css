@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -37,79 +37,76 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 5px);
-  --radius-md: calc(var(--radius) - 3px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 5px);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  --radius: 0.9rem;
-  --background: oklch(0.969 0.009 250);
-  --foreground: oklch(0.195 0.025 255);
-  --card: oklch(0.998 0.002 255);
-  --card-foreground: oklch(0.195 0.025 255);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.195 0.025 255);
-  --primary: oklch(0.59 0.205 255);
-  --primary-foreground: oklch(0.985 0.004 255);
-  --secondary: oklch(0.955 0.016 250);
-  --secondary-foreground: oklch(0.28 0.04 255);
-  --muted: oklch(0.953 0.011 252);
-  --muted-foreground: oklch(0.49 0.035 255);
-  --accent: oklch(0.936 0.035 250);
-  --accent-foreground: oklch(0.29 0.075 255);
-  --destructive: oklch(0.61 0.225 27);
-  --border: oklch(0.895 0.018 252);
-  --input: oklch(0.885 0.019 252);
-  --ring: oklch(0.63 0.19 255);
-  --chart-1: oklch(0.61 0.21 255);
-  --chart-2: oklch(0.67 0.16 165);
-  --chart-3: oklch(0.72 0.16 75);
-  --chart-4: oklch(0.64 0.19 315);
-  --chart-5: oklch(0.63 0.2 28);
-  --sidebar: oklch(0.992 0.006 252);
-  --sidebar-foreground: oklch(0.24 0.03 255);
-  --sidebar-primary: oklch(0.59 0.205 255);
-  --sidebar-primary-foreground: oklch(0.985 0.004 255);
-  --sidebar-accent: oklch(0.945 0.03 250);
-  --sidebar-accent-foreground: oklch(0.31 0.08 255);
-  --sidebar-border: oklch(0.895 0.018 252);
-  --sidebar-ring: oklch(0.63 0.19 255);
+  --app-font-sans: Inter, "SF Pro Text", "SF Pro Display", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --app-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --radius: 0.625rem;
+  --background: #f4f6fa;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --primary: #4263eb;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f7;
+  --secondary-foreground: #273149;
+  --muted: #f0f2f6;
+  --muted-foreground: #667085;
+  --accent: #edf1ff;
+  --accent-foreground: #3047b8;
+  --destructive: #e5484d;
+  --border: #e3e7ef;
+  --input: #dce2ec;
+  --ring: #6d83f2;
+  --chart-1: #4263eb;
+  --chart-2: #12b886;
+  --chart-3: #f59f00;
+  --chart-4: #7950f2;
+  --chart-5: #fa5252;
+  --sidebar: #111827;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #5c7cfa;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 255, 255, 0.09);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: #91a7ff;
 }
 
 .dark {
-  --background: oklch(0.16 0.02 255);
-  --foreground: oklch(0.97 0.006 255);
-  --card: oklch(0.205 0.025 255);
-  --card-foreground: oklch(0.97 0.006 255);
-  --popover: oklch(0.205 0.025 255);
-  --popover-foreground: oklch(0.97 0.006 255);
-  --primary: oklch(0.72 0.17 255);
-  --primary-foreground: oklch(0.16 0.02 255);
-  --secondary: oklch(0.26 0.025 255);
-  --secondary-foreground: oklch(0.97 0.006 255);
-  --muted: oklch(0.26 0.025 255);
-  --muted-foreground: oklch(0.73 0.025 255);
-  --accent: oklch(0.29 0.045 255);
-  --accent-foreground: oklch(0.97 0.006 255);
-  --destructive: oklch(0.69 0.19 25);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.7 0.16 255);
-  --chart-1: oklch(0.67 0.2 255);
-  --chart-2: oklch(0.7 0.16 165);
-  --chart-3: oklch(0.75 0.16 75);
-  --chart-4: oklch(0.68 0.18 315);
-  --chart-5: oklch(0.68 0.19 28);
-  --sidebar: oklch(0.19 0.025 255);
-  --sidebar-foreground: oklch(0.97 0.006 255);
-  --sidebar-primary: oklch(0.7 0.18 255);
-  --sidebar-primary-foreground: oklch(0.16 0.02 255);
-  --sidebar-accent: oklch(0.28 0.04 255);
-  --sidebar-accent-foreground: oklch(0.97 0.006 255);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.7 0.16 255);
+  --background: #0f1420;
+  --foreground: #f4f7fb;
+  --card: #171d2b;
+  --card-foreground: #f4f7fb;
+  --popover: #171d2b;
+  --popover-foreground: #f4f7fb;
+  --primary: #748ffc;
+  --primary-foreground: #0f1420;
+  --secondary: #232b3d;
+  --secondary-foreground: #eef2ff;
+  --muted: #202838;
+  --muted-foreground: #a8b1c3;
+  --accent: #25304a;
+  --accent-foreground: #dbe4ff;
+  --destructive: #ff6b6b;
+  --border: rgba(255, 255, 255, 0.11);
+  --input: rgba(255, 255, 255, 0.14);
+  --ring: #91a7ff;
+  --sidebar: #0b1020;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #748ffc;
+  --sidebar-primary-foreground: #0f1420;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: #91a7ff;
 }
 
 @layer base {
@@ -117,30 +114,35 @@
     @apply border-border outline-ring/50;
   }
 
-  html {
+  html,
+  body {
     min-height: 100%;
+  }
+
+  html {
     background: var(--background);
     text-size-adjust: 100%;
   }
 
   body {
-    min-height: 100%;
     @apply bg-background text-foreground;
+    font-family: var(--app-font-sans);
+    font-size: 14px;
     font-weight: 450;
-    letter-spacing: -0.006em;
+    letter-spacing: -0.008em;
     text-rendering: geometricPrecision;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  strong,
-  b,
-  th,
   h1,
   h2,
-  h3 {
-    font-weight: 690;
-    letter-spacing: -0.018em;
+  h3,
+  strong,
+  b,
+  th {
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
   button,
@@ -151,17 +153,17 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    background: rgba(66, 99, 235, 0.20);
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+    scrollbar-color: rgba(91, 102, 124, 0.30) transparent;
   }
 
   *::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
   }
 
   *::-webkit-scrollbar-track {
@@ -171,175 +173,438 @@
   *::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 999px;
-    background: color-mix(in oklab, var(--foreground) 16%, transparent);
+    background: rgba(91, 102, 124, 0.30);
     background-clip: padding-box;
   }
 }
 
 @layer components {
-  body > div.flex.h-screen {
+  /* ===== Application shell ===== */
+  body .flex.h-screen:has(> aside + main) {
+    background: #f4f6fa !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside {
+    width: 252px !important;
+    border-right: 0 !important;
     background:
-      radial-gradient(circle at 18% -10%, rgba(59, 130, 246, 0.10), transparent 32rem),
-      radial-gradient(circle at 92% 0%, rgba(14, 165, 233, 0.08), transparent 28rem),
-      linear-gradient(180deg, #f5f8fc 0%, #edf2f8 100%) !important;
+      radial-gradient(circle at 18% 0%, rgba(92, 124, 250, 0.26), transparent 17rem),
+      linear-gradient(180deg, #141c2f 0%, #0d1424 100%) !important;
+    color: #f8fafc !important;
+    box-shadow: 14px 0 40px rgba(15, 23, 42, 0.14) !important;
   }
 
-  aside {
-    border-right-color: rgba(148, 163, 184, 0.22) !important;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96)) !important;
-    box-shadow: 18px 0 42px rgba(15, 23, 42, 0.055) !important;
+  body .flex.h-screen:has(> aside + main) > aside > div:first-child {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+    padding: 18px 16px !important;
+    background: rgba(255, 255, 255, 0.015) !important;
   }
 
-  aside > div:first-child {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.96));
-  }
-
-  aside button {
+  body .flex.h-screen:has(> aside + main) > aside > div:first-child > div > div:first-child {
+    width: 42px !important;
+    height: 42px !important;
     border-radius: 12px !important;
-    transition: background-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: linear-gradient(135deg, #748ffc 0%, #4263eb 58%, #22b8cf 130%) !important;
+    box-shadow: 0 12px 28px rgba(66, 99, 235, 0.36) !important;
   }
 
-  aside button:hover {
+  body .flex.h-screen:has(> aside + main) > aside h1,
+  body .flex.h-screen:has(> aside + main) > aside .text-zinc-950 {
+    color: #ffffff !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside p,
+  body .flex.h-screen:has(> aside + main) > aside .text-zinc-500,
+  body .flex.h-screen:has(> aside + main) > aside .text-zinc-400,
+  body .flex.h-screen:has(> aside + main) > aside .text-zinc-600 {
+    color: rgba(226, 232, 240, 0.58) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside > div:nth-child(2) {
+    border-bottom-color: rgba(255, 255, 255, 0.07) !important;
+    padding: 12px 14px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside input {
+    height: 38px !important;
+    border-color: rgba(255, 255, 255, 0.09) !important;
+    background: rgba(255, 255, 255, 0.065) !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside input::placeholder {
+    color: rgba(226, 232, 240, 0.40) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav {
+    padding: 12px 10px 18px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav > div {
+    margin-bottom: 14px;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav > div > div:first-child {
+    padding: 0 10px 6px !important;
+    color: rgba(203, 213, 225, 0.40) !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav button {
+    min-height: 42px !important;
+    border-radius: 10px !important;
+    color: rgba(226, 232, 240, 0.72) !important;
+    transition: background-color 150ms ease, color 150ms ease, transform 150ms ease !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav button:hover {
     transform: translateX(2px);
-    background: rgba(59, 130, 246, 0.075) !important;
-    color: #1d4ed8 !important;
+    background: rgba(255, 255, 255, 0.065) !important;
+    color: #ffffff !important;
   }
 
-  aside button.bg-zinc-950,
-  aside .bg-zinc-950 {
-    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #0ea5e9 100%) !important;
-    color: white !important;
-    border-color: rgba(255, 255, 255, 0.16) !important;
-    box-shadow: 0 10px 26px rgba(37, 99, 235, 0.24) !important;
+  body .flex.h-screen:has(> aside + main) > aside nav button > span:first-of-type {
+    background: rgba(255, 255, 255, 0.065) !important;
+    color: rgba(226, 232, 240, 0.72) !important;
   }
 
-  main {
+  body .flex.h-screen:has(> aside + main) > aside nav button[aria-current="page"] {
+    background: linear-gradient(135deg, rgba(92, 124, 250, 0.98), rgba(66, 99, 235, 0.94)) !important;
+    color: #ffffff !important;
+    box-shadow: 0 10px 24px rgba(38, 67, 168, 0.36) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav button[aria-current="page"] > span:first-of-type {
+    background: rgba(255, 255, 255, 0.14) !important;
+    color: #ffffff !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside nav button[aria-current="page"] > span.absolute {
+    left: 6px !important;
+    top: 11px !important;
+    bottom: 11px !important;
+    width: 3px !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    opacity: 0.88;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside > div:last-child {
+    border-top-color: rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.018) !important;
+    padding: 12px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside > div:last-child > div {
+    border-color: rgba(255, 255, 255, 0.09) !important;
+    background: rgba(255, 255, 255, 0.055) !important;
+    box-shadow: none !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > aside > div:last-child > div > div:nth-child(2) {
+    border-color: rgba(255, 255, 255, 0.07) !important;
+    background: rgba(255, 255, 255, 0.045) !important;
+  }
+
+  /* ===== Main surface and top toolbar ===== */
+  body .flex.h-screen:has(> aside + main) > main {
     background:
-      radial-gradient(circle at 25% -8%, rgba(59, 130, 246, 0.07), transparent 34rem),
-      radial-gradient(circle at 100% 12%, rgba(14, 165, 233, 0.05), transparent 24rem),
-      linear-gradient(180deg, #f5f8fc 0%, #eef3f8 100%) !important;
+      radial-gradient(circle at 18% -5%, rgba(66, 99, 235, 0.075), transparent 30rem),
+      linear-gradient(180deg, #f7f8fb 0%, #f2f4f8 100%) !important;
   }
 
-  main > .sticky {
-    border-bottom-color: rgba(148, 163, 184, 0.22) !important;
-    background: rgba(250, 252, 255, 0.86) !important;
-    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.055) !important;
-    backdrop-filter: blur(18px) saturate(145%) !important;
+  body .flex.h-screen:has(> aside + main) > main > .sticky.top-0 {
+    min-height: 66px !important;
+    border-bottom: 1px solid rgba(223, 228, 237, 0.88) !important;
+    background: rgba(255, 255, 255, 0.88) !important;
+    box-shadow: 0 8px 26px rgba(18, 28, 45, 0.045) !important;
+    backdrop-filter: blur(20px) saturate(150%) !important;
   }
 
-  [data-slot="card"] {
-    gap: 1rem !important;
+  body .flex.h-screen:has(> aside + main) > main > .sticky.top-0 > div:first-child > div:first-child {
+    width: 38px !important;
+    height: 38px !important;
+    border: 0 !important;
+    border-radius: 11px !important;
+    background: linear-gradient(135deg, #eef1ff, #e7edff) !important;
+    color: #4263eb !important;
+    box-shadow: none !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .sticky.top-0 .bg-zinc-100\/80 {
+    border-color: #e5e9f1 !important;
+    background: #f2f4f8 !important;
+    box-shadow: none !important;
+  }
+
+  /* ===== Dashboard V2 ===== */
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl {
+    max-width: none !important;
+    padding: 24px 28px 40px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child {
+    position: relative;
+    overflow: hidden;
+    border: 0 !important;
     border-radius: 18px !important;
-    border-color: rgba(148, 163, 184, 0.20) !important;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.985), rgba(252, 254, 255, 0.98)) !important;
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.025),
-      0 12px 34px rgba(15, 23, 42, 0.055) !important;
-    transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease !important;
+      linear-gradient(128deg, #101a31 0%, #203a78 51%, #4263eb 100%) !important;
+    box-shadow: 0 24px 54px rgba(28, 48, 101, 0.20) !important;
   }
 
-  main [data-slot="card"]:hover {
-    transform: translateY(-1px);
-    border-color: rgba(59, 130, 246, 0.22) !important;
-    box-shadow:
-      0 2px 4px rgba(15, 23, 42, 0.035),
-      0 16px 42px rgba(15, 23, 42, 0.075) !important;
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child::before {
+    content: "";
+    position: absolute;
+    top: -160px;
+    right: -95px;
+    width: 390px;
+    height: 390px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 68%);
+    pointer-events: none;
   }
 
-  [data-slot="card-title"] {
-    color: #152238 !important;
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child::after {
+    content: "";
+    position: absolute;
+    bottom: -190px;
+    left: 24%;
+    width: 430px;
+    height: 430px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(34, 184, 207, 0.18), rgba(34, 184, 207, 0) 68%);
+    pointer-events: none;
   }
 
-  [data-slot="card-description"] {
-    color: #6b7b91 !important;
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child h2,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-950,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-900,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-800 {
+    color: #ffffff !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child p,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-500,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-600,
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child .text-zinc-700 {
+    color: rgba(232, 238, 255, 0.72) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:first-child [data-slot="badge"] {
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    background: rgba(255, 255, 255, 0.10) !important;
+    color: #ffffff !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:first-child [data-slot="button"] {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.10) !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    backdrop-filter: blur(10px);
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:first-child [data-slot="button"]:hover {
+    background: rgba(255, 255, 255, 0.17) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:nth-child(2) > div:first-child {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: rgba(255, 255, 255, 0.085) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(10px);
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:nth-child(2) > div:first-child .bg-zinc-100 {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:nth-child(2) > div:nth-child(2) > div {
+    min-height: 104px;
+    border-color: rgba(255, 255, 255, 0.70) !important;
+    border-radius: 13px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 14px 30px rgba(7, 18, 46, 0.16) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:nth-child(2) > div:nth-child(2) > div .text-zinc-500 {
+    color: #697386 !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child > div:nth-child(2) > div:nth-child(2) > div .text-zinc-900 {
+    color: #172033 !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] {
+    border: 1px solid #e2e6ee !important;
+    border-radius: 16px !important;
+    background: #ffffff !important;
+    box-shadow: 0 14px 38px rgba(18, 28, 45, 0.065) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-header"] {
+    border-bottom: 1px solid #edf0f5;
+    padding: 18px 20px 15px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-title"] {
+    font-size: 15px !important;
+    color: #172033 !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-description"] {
+    color: #7a8496 !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] {
+    padding: 18px 20px 20px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid {
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid > div {
+    position: relative;
+    overflow: hidden;
+    min-height: 112px;
+    border: 1px solid #e7eaf1 !important;
+    border-radius: 11px !important;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%) !important;
+    box-shadow: 0 2px 8px rgba(18, 28, 45, 0.035) !important;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid > div::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 14px;
+    bottom: 14px;
+    width: 3px;
+    border-radius: 0 999px 999px 0;
+    background: linear-gradient(180deg, #748ffc, #4263eb);
+    opacity: 0.78;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid > div:hover {
+    transform: translateY(-2px);
+    border-color: rgba(66, 99, 235, 0.42) !important;
+    box-shadow: 0 12px 24px rgba(18, 28, 45, 0.085) !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid > div .text-sm.font-extrabold {
+    font-weight: 700 !important;
+    color: #1f2937 !important;
+  }
+
+  body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid > div span.rounded {
+    border: 1px solid transparent;
+    border-radius: 999px !important;
+    padding: 2px 7px !important;
+  }
+
+  /* ===== Shared component finish ===== */
+  [data-slot="card"] {
+    border-color: #e3e7ef !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    box-shadow: 0 8px 26px rgba(18, 28, 45, 0.055) !important;
   }
 
   [data-slot="button"] {
-    border-radius: 11px !important;
-    letter-spacing: -0.008em;
-    transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease !important;
+    border-radius: 9px !important;
+    font-weight: 650 !important;
+    letter-spacing: -0.01em;
+    transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease !important;
   }
 
   [data-slot="button"]:not(:disabled):active {
-    transform: translateY(1px) scale(0.99);
-  }
-
-  [data-slot="button"].bg-primary,
-  [data-slot="button"].bg-zinc-950 {
-    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 58%, #0ea5e9 100%) !important;
-    border-color: transparent !important;
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22) !important;
-  }
-
-  [data-slot="button"].bg-primary:hover,
-  [data-slot="button"].bg-zinc-950:hover {
-    box-shadow: 0 11px 26px rgba(37, 99, 235, 0.28) !important;
+    transform: translateY(1px);
   }
 
   [data-slot="badge"] {
-    min-height: 22px;
+    min-height: 21px;
     border-radius: 999px !important;
-    padding-inline: 0.55rem !important;
+    padding-inline: 8px !important;
     font-weight: 650 !important;
-    letter-spacing: 0;
   }
 
   [data-slot="progress"] {
     height: 7px !important;
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    background: rgba(148, 163, 184, 0.16) !important;
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.055);
+    border: 0 !important;
+    background: #e9edf4 !important;
   }
 
   [data-slot="progress-indicator"] {
-    background: linear-gradient(90deg, #2563eb 0%, #3b82f6 55%, #22c55e 130%) !important;
-    box-shadow: 0 0 14px rgba(59, 130, 246, 0.28);
+    background: linear-gradient(90deg, #748ffc 0%, #4263eb 58%, #22b8cf 118%) !important;
+    box-shadow: 0 0 12px rgba(66, 99, 235, 0.26);
   }
 
-  [data-slot="table-container"],
-  table {
-    border-radius: 14px;
-  }
-
-  thead tr {
-    background: rgba(241, 245, 249, 0.78);
-  }
-
-  tbody tr {
-    transition: background-color 140ms ease;
-  }
-
-  tbody tr:hover {
-    background: rgba(239, 246, 255, 0.68);
-  }
-
+  [data-slot="input"],
   input,
   textarea,
   select,
   [data-slot="select-trigger"] {
-    border-radius: 11px !important;
-    background: rgba(255, 255, 255, 0.92) !important;
-    box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.025);
+    border-radius: 9px !important;
   }
 
-  input:focus,
-  textarea:focus,
-  select:focus,
-  [data-slot="select-trigger"]:focus {
-    border-color: rgba(59, 130, 246, 0.42) !important;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.10) !important;
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  thead tr {
+    background: #f6f7f9;
+  }
+
+  tbody tr {
+    transition: background-color 130ms ease;
+  }
+
+  tbody tr:hover {
+    background: #f7f9ff;
   }
 }
 
-@media (max-width: 640px) {
-  [data-slot="card"] {
-    border-radius: 14px !important;
+@media (max-width: 1279px) {
+  @layer components {
+    body .flex.h-screen:has(> aside + main) > main > .max-w-7xl {
+      padding: 18px 20px 30px !important;
+    }
   }
+}
 
-  main > .sticky {
-    backdrop-filter: blur(12px) saturate(130%) !important;
+@media (max-width: 639px) {
+  @layer components {
+    body .flex.h-screen:has(> aside + main) > aside {
+      width: 72px !important;
+    }
+
+    body .flex.h-screen:has(> aside + main) > main > .max-w-7xl {
+      padding: 12px !important;
+    }
+
+    body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > div:first-child {
+      border-radius: 14px !important;
+    }
+
+    body .flex.h-screen:has(> aside + main) > main > .max-w-7xl > [data-slot="card"] [data-slot="card-content"] > .grid {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
   }
 }
 
