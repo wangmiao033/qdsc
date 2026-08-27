@@ -184,41 +184,103 @@ export default function BannerMasterWorkbenchView() {
 
   const completedMasters = sourceByGroup.size
   const coveredTargets = coveredTargetKeys.size
+  const generatedTargets = generatedTargetKeys.size
   const totalTargets = allTargetKeys.size
   const missingTargets = Math.max(0, totalTargets - coveredTargets)
-  const coveragePercent = totalTargets > 0 ? Math.round((coveredTargets / totalTargets) * 100) : 0
   const waitingToGenerate = [...coveredTargetKeys].filter(key => !generatedTargetKeys.has(key)).length
+  const coveragePercent = totalTargets > 0 ? Math.round((coveredTargets / totalTargets) * 100) : 0
+  const generationPercent = totalTargets > 0 ? Math.round((generatedTargets / totalTargets) * 100) : 0
 
   const gainForGroup = (group: MasterGroup) =>
     group.sizes.reduce((sum, key) => sum + (coveredTargetKeys.has(key) ? 0 : 1), 0)
 
-  const missingGroups = useMemo(
-    () => MASTER_GROUPS.filter(group => !sourceByGroup.has(group.id)),
-    [sourceByGroup]
-  )
+  const overallRisk = useMemo(() => {
+    const claimed = new Set<string>()
+    let review = 0
+    let high = 0
+
+    for (const group of MASTER_GROUPS) {
+      const source = sourceByGroup.get(group.id)
+      if (!source) continue
+      for (const target of getGroupSizes(group, sizeByKey)) {
+        if (claimed.has(target.key)) continue
+        claimed.add(target.key)
+        const loss = getCropLoss(source, target)
+        if (loss > 0.08) high += 1
+        else if (loss > 0.03) review += 1
+      }
+    }
+
+    return { review, high, total: review + high }
+  }, [sourceByGroup, sizeByKey])
 
   const recommendedGroups = useMemo(
-    () => [...missingGroups].sort((a, b) => gainForGroup(b) - gainForGroup(a) || b.sizes.length - a.sizes.length),
-    [missingGroups, coveredTargetKeys]
+    () => MASTER_GROUPS
+      .filter(group => !sourceByGroup.has(group.id) && gainForGroup(group) > 0)
+      .sort((a, b) => gainForGroup(b) - gainForGroup(a) || b.sizes.length - a.sizes.length),
+    [sourceByGroup, coveredTargetKeys]
   )
 
   const recommended = recommendedGroups[0] || null
 
   const visibleGroups = useMemo(() => {
-    let list = showMissingOnly
-      ? MASTER_GROUPS.filter(group => !sourceByGroup.has(group.id))
-      : [...MASTER_GROUPS]
+    let list = [...MASTER_GROUPS]
+
+    if (showMissingOnly) {
+      list = list.filter(group => {
+        const source = sourceByGroup.get(group.id)
+        const needsSource = !source && gainForGroup(group) > 0
+        const hasPendingOutput = Boolean(source) && group.sizes.some(key => !generatedTargetKeys.has(key))
+        return needsSource || hasPendingOutput
+      })
+    }
 
     if (sortMode === 'gain') {
-      list = list.sort((a, b) => {
-        const aReady = sourceByGroup.has(a.id) ? 1 : 0
-        const bReady = sourceByGroup.has(b.id) ? 1 : 0
-        if (aReady !== bReady) return aReady - bReady
+      list.sort((a, b) => {
+        const aSource = sourceByGroup.has(a.id)
+        const bSource = sourceByGroup.has(b.id)
+        const aPending = aSource && a.sizes.some(key => !generatedTargetKeys.has(key))
+        const bPending = bSource && b.sizes.some(key => !generatedTargetKeys.has(key))
+        const aRank = !aSource && gainForGroup(a) > 0 ? 0 : aPending ? 1 : 2
+        const bRank = !bSource && gainForGroup(b) > 0 ? 0 : bPending ? 1 : 2
+        if (aRank !== bRank) return aRank - bRank
         return gainForGroup(b) - gainForGroup(a) || b.sizes.length - a.sizes.length
       })
     }
+
     return list
-  }, [showMissingOnly, sortMode, sourceByGroup, coveredTargetKeys])
+  }, [showMissingOnly, sortMode, sourceByGroup, coveredTargetKeys, generatedTargetKeys])
+
+  const statusMeta = useMemo(() => {
+    if (sources.length === 0) {
+      return {
+        label: '等待上传母版',
+        className: 'border-zinc-300 bg-zinc-50 text-zinc-700',
+      }
+    }
+    if (missingTargets > 0) {
+      return {
+        label: `待补母版 · ${missingTargets} 尺寸未覆盖`,
+        className: 'border-amber-300 bg-amber-50 text-amber-800',
+      }
+    }
+    if (waitingToGenerate > 0) {
+      return {
+        label: `覆盖完成 · 待生成 ${waitingToGenerate}`,
+        className: 'border-blue-300 bg-blue-50 text-blue-800',
+      }
+    }
+    if (generatedTargets === totalTargets && totalTargets > 0) {
+      return {
+        label: '全部生成完成',
+        className: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+      }
+    }
+    return {
+      label: '处理中',
+      className: 'border-zinc-300 bg-zinc-50 text-zinc-700',
+    }
+  }, [sources.length, missingTargets, waitingToGenerate, generatedTargets, totalTargets])
 
   const cropSettings: BannerCropSettings = {
     cropMode,
@@ -351,6 +413,20 @@ export default function BannerMasterWorkbenchView() {
     return plans
   }
 
+  const createAndSaveZip = async (items: BannerOutput[]) => {
+    const zip = new JSZip()
+    const used = new Set<string>()
+    for (const output of items) {
+      const key = `${output.width}x${output.height}`
+      if (used.has(key)) continue
+      used.add(key)
+      zip.file(output.name, output.blob)
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
+    saveAs(blob, `banner_master_workbench_${used.size}sizes.zip`)
+    return used.size
+  }
+
   const handleGenerateMissing = async () => {
     if (isGenerating || sources.length === 0) return
     const plans = buildMissingPlans()
@@ -359,7 +435,7 @@ export default function BannerMasterWorkbenchView() {
     if (total === 0) {
       toast({
         title: '当前可覆盖尺寸已全部生成',
-        description: '新增或替换母版后，再点击「生成未导出」即可。',
+        description: missingTargets > 0 ? `仍有 ${missingTargets} 个尺寸需要补母版。` : '全部目标尺寸均已生成。',
       })
       return
     }
@@ -378,7 +454,7 @@ export default function BannerMasterWorkbenchView() {
         title: `新增生成 ${result.outputs.length} 张`,
         description: result.failed > 0
           ? `失败 ${result.failed} 张，请复核对应母版。`
-          : '只生成当前母版已覆盖且尚未导出的目标尺寸，已自动去重。',
+          : '只生成当前母版已覆盖、但尚未生成的目标尺寸。',
         variant: result.failed > 0 ? 'destructive' : 'default',
       })
     } catch (error) {
@@ -392,20 +468,62 @@ export default function BannerMasterWorkbenchView() {
     }
   }
 
+  const handleGenerateAndExport = async () => {
+    if (isGenerating || isZipping || sources.length === 0) return
+
+    setIsGenerating(true)
+    setProgress(0)
+    let nextOutputs = outputs
+    let failed = 0
+
+    try {
+      const plans = buildMissingPlans()
+      const total = plans.reduce((sum, plan) => sum + plan.sizes.length, 0)
+
+      if (total > 0) {
+        const result = await generateBannerOutputs(
+          plans,
+          cropSettings,
+          setProgress,
+          { layout: 'flat', useFormatFolder: false }
+        )
+        failed = result.failed
+        nextOutputs = [...outputs, ...result.outputs]
+        setOutputs(nextOutputs)
+      }
+
+      if (nextOutputs.length === 0) {
+        toast({ title: '暂无可导出内容', description: '请先上传能够覆盖目标尺寸的母版。' })
+        return
+      }
+
+      setIsZipping(true)
+      const uniqueCount = await createAndSaveZip(nextOutputs)
+      toast({
+        title: `已导出 ${uniqueCount} 个唯一尺寸`,
+        description: [
+          failed > 0 ? `本次有 ${failed} 张生成失败` : '',
+          missingTargets > 0 ? `仍有 ${missingTargets} 个尺寸尚未被母版覆盖` : '',
+        ].filter(Boolean).join(' · ') || '已生成并打包全部当前可用成品。',
+        variant: failed > 0 ? 'destructive' : 'default',
+      })
+    } catch (error) {
+      toast({
+        title: '生成或导出失败',
+        description: error instanceof Error ? error.message : '处理过程中出现错误',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsGenerating(false)
+      setIsZipping(false)
+    }
+  }
+
   const downloadZip = async () => {
     if (outputs.length === 0 || isZipping) return
     setIsZipping(true)
     try {
-      const zip = new JSZip()
-      const used = new Set<string>()
-      for (const output of outputs) {
-        const key = `${output.width}x${output.height}`
-        if (used.has(key)) continue
-        used.add(key)
-        zip.file(output.name, output.blob)
-      }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      saveAs(blob, `banner_master_workbench_${used.size}sizes.zip`)
+      await createAndSaveZip(outputs)
     } catch (error) {
       toast({
         title: 'ZIP 打包失败',
@@ -454,20 +572,23 @@ export default function BannerMasterWorkbenchView() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-zinc-950 text-white hover:bg-zinc-950">母版优先</Badge>
               <Badge variant="outline">自动去重</Badge>
-              <Badge variant="outline">只生成未导出</Badge>
+              <Badge variant="outline">覆盖 / 生成分离</Badge>
             </div>
             <h2 className="mt-2 flex items-center gap-2 text-xl font-extrabold text-zinc-950">
               <Layers className="h-5 w-5" />
               Banner 母版工作台
             </h2>
             <p className="mt-1 text-sm font-medium text-zinc-500">
-              不再逐个补尺寸。先完成高收益母版，再一次派生全部目标尺寸；同分类重复上传会自动替换。
+              母版覆盖完成不再等于成品完成。这里会分别统计“已覆盖”“已生成”“待生成”和“待复核”。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={cn('h-8 px-3 text-xs font-extrabold', statusMeta.className)}>
+              {statusMeta.label}
+            </Badge>
             <Button variant="outline" size="sm" onClick={() => setShowMissingOnly(value => !value)}>
               <Filter className="mr-1.5 h-3.5 w-3.5" />
-              {showMissingOnly ? '显示全部母版' : '只看未完成'}
+              {showMissingOnly ? '显示全部母版' : '只看待处理'}
             </Button>
             <Button variant="outline" size="sm" onClick={resetAll} disabled={sources.length === 0 && outputs.length === 0}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
@@ -476,30 +597,49 @@ export default function BannerMasterWorkbenchView() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-lg border bg-zinc-50 px-3 py-2.5">
             <div className="text-2xl font-extrabold tabular-nums text-zinc-950">{completedMasters}/{MASTER_GROUPS.length}</div>
-            <div className="text-[11px] font-bold text-zinc-500">已完成母版</div>
+            <div className="text-[11px] font-bold text-zinc-500">已上传母版</div>
           </div>
           <div className="rounded-lg border bg-emerald-50/60 px-3 py-2.5">
             <div className="text-2xl font-extrabold tabular-nums text-emerald-700">{coveredTargets}/{totalTargets}</div>
             <div className="text-[11px] font-bold text-zinc-500">已覆盖目标尺寸</div>
           </div>
           <div className="rounded-lg border bg-blue-50/60 px-3 py-2.5">
-            <div className="text-2xl font-extrabold tabular-nums text-blue-700">{coveragePercent}%</div>
-            <div className="text-[11px] font-bold text-zinc-500">当前覆盖率</div>
+            <div className="text-2xl font-extrabold tabular-nums text-blue-700">{generatedTargets}/{totalTargets}</div>
+            <div className="text-[11px] font-bold text-zinc-500">已实际生成</div>
+          </div>
+          <div className="rounded-lg border bg-violet-50/60 px-3 py-2.5">
+            <div className="text-2xl font-extrabold tabular-nums text-violet-700">{waitingToGenerate}</div>
+            <div className="text-[11px] font-bold text-zinc-500">已覆盖待生成</div>
           </div>
           <div className="rounded-lg border bg-amber-50/60 px-3 py-2.5">
             <div className="text-2xl font-extrabold tabular-nums text-amber-700">{missingTargets}</div>
-            <div className="text-[11px] font-bold text-zinc-500">待补母版覆盖尺寸</div>
+            <div className="text-[11px] font-bold text-zinc-500">尚未覆盖</div>
           </div>
-          <div className="rounded-lg border bg-violet-50/60 px-3 py-2.5">
-            <div className="truncate text-base font-extrabold text-violet-800">{recommended ? `${recommended.master}` : '已完成'}</div>
-            <div className="text-[11px] font-bold text-zinc-500">下一张最划算母版</div>
+          <div className="rounded-lg border bg-orange-50/60 px-3 py-2.5">
+            <div className="text-2xl font-extrabold tabular-nums text-orange-700">{overallRisk.total}</div>
+            <div className="text-[11px] font-bold text-zinc-500">建议复核</div>
           </div>
         </div>
 
-        <Progress value={coveragePercent} className="mt-3 h-2" />
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border bg-zinc-50/60 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-bold">
+              <span className="text-zinc-600">母版覆盖进度</span>
+              <span className="tabular-nums text-emerald-700">{coveragePercent}% · {coveredTargets}/{totalTargets}</span>
+            </div>
+            <Progress value={coveragePercent} className="h-2" />
+          </div>
+          <div className="rounded-lg border bg-zinc-50/60 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-bold">
+              <span className="text-zinc-600">成品生成进度</span>
+              <span className="tabular-nums text-blue-700">{generationPercent}% · {generatedTargets}/{totalTargets}</span>
+            </div>
+            <Progress value={generationPercent} className="h-2" />
+          </div>
+        </div>
       </section>
 
       {recommended && (
@@ -520,12 +660,12 @@ export default function BannerMasterWorkbenchView() {
         </section>
       )}
 
-      <div className="grid gap-4 min-[1280px]:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-4 min-[1280px]:grid-cols-[330px_minmax(0,1fr)]">
         <div className="space-y-4 min-[1280px]:sticky min-[1280px]:top-4 min-[1280px]:self-start">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm"><Upload className="h-4 w-4" />上传母版</CardTitle>
-              <CardDescription>可以一次拖入多张，系统自动归类；同类只保留最新一张。</CardDescription>
+              <CardDescription>可一次拖入多张，系统自动归类；同类只保留最新一张。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div
@@ -565,9 +705,10 @@ export default function BannerMasterWorkbenchView() {
               {sources.length > 0 && (
                 <div className="rounded-lg border bg-zinc-50 p-2.5 text-xs">
                   <div className="flex items-center justify-between"><span className="font-bold">本次已上传</span><span>{sources.length} 张</span></div>
-                  <div className="mt-1 flex items-center justify-between text-zinc-500"><span>已覆盖</span><span>{coveredTargets} 个目标尺寸</span></div>
-                  <div className="mt-1 flex items-center justify-between text-zinc-500"><span>当前可生成未导出</span><span>{waitingToGenerate} 个</span></div>
-                  <div className="mt-1 flex items-center justify-between text-amber-700"><span>待补母版覆盖</span><span>{missingTargets} 个</span></div>
+                  <div className="mt-1 flex items-center justify-between text-emerald-700"><span>已覆盖</span><span>{coveredTargets} 个</span></div>
+                  <div className="mt-1 flex items-center justify-between text-blue-700"><span>已生成</span><span>{generatedTargets} 个</span></div>
+                  <div className="mt-1 flex items-center justify-between text-violet-700"><span>待生成</span><span>{waitingToGenerate} 个</span></div>
+                  <div className="mt-1 flex items-center justify-between text-amber-700"><span>未覆盖</span><span>{missingTargets} 个</span></div>
                 </div>
               )}
             </CardContent>
@@ -619,21 +760,36 @@ export default function BannerMasterWorkbenchView() {
                 </div>
               )}
 
-              <div className="rounded-lg border bg-zinc-50 px-3 py-2 text-[11px] font-medium text-zinc-600">
-                当前按钮只会生成 <span className="font-extrabold text-zinc-950">{waitingToGenerate}</span> 个已被母版覆盖、但尚未导出的尺寸；
-                另外 <span className="font-extrabold text-amber-700">{missingTargets}</span> 个仍需要继续补母版。
+              <div className="rounded-lg border bg-zinc-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-zinc-600">
+                “生成并导出”会补齐 <span className="font-extrabold text-violet-700">{waitingToGenerate}</span> 个当前已覆盖但尚未生成的尺寸，
+                然后把当前全部 <span className="font-extrabold text-blue-700">{generatedTargets + waitingToGenerate}</span> 个可用唯一尺寸打包下载。
+                {missingTargets > 0 && <> 另外仍有 <span className="font-extrabold text-amber-700">{missingTargets}</span> 个尺寸需要继续补母版。</>}
               </div>
 
-              <Button className="w-full bg-red-600 hover:bg-red-700" disabled={sources.length === 0 || isGenerating || waitingToGenerate === 0} onClick={() => void handleGenerateMissing()}>
-                {isGenerating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
-                {isGenerating ? '生成中...' : `生成未导出（${waitingToGenerate}）`}
+              <Button
+                className="w-full bg-red-600 hover:bg-red-700"
+                disabled={sources.length === 0 || isGenerating || isZipping || (waitingToGenerate === 0 && outputs.length === 0)}
+                onClick={() => void handleGenerateAndExport()}
+              >
+                {isGenerating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileArchive className="mr-1.5 h-4 w-4" />}
+                {isGenerating
+                  ? `生成中 ${Math.round(progress)}%...`
+                  : isZipping
+                    ? '打包中...'
+                    : waitingToGenerate > 0
+                      ? `生成并导出（${waitingToGenerate}）`
+                      : '重新下载完整 ZIP'}
               </Button>
               {isGenerating && <Progress value={progress} className="h-1.5" />}
 
-              <Button variant="outline" className="w-full" disabled={outputs.length === 0 || isZipping} onClick={() => void downloadZip()}>
-                {isZipping ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileArchive className="mr-1.5 h-4 w-4" />}
-                下载 ZIP · {generatedTargetKeys.size} 尺寸
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" disabled={sources.length === 0 || isGenerating || waitingToGenerate === 0} onClick={() => void handleGenerateMissing()}>
+                  <Zap className="mr-1.5 h-3.5 w-3.5" />仅生成
+                </Button>
+                <Button variant="outline" disabled={outputs.length === 0 || isZipping} onClick={() => void downloadZip()}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />当前 ZIP
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -643,11 +799,11 @@ export default function BannerMasterWorkbenchView() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <CardTitle className="text-base">母版任务看板</CardTitle>
-                <CardDescription className="mt-1">先做覆盖收益高的母版。点击任一母版可展开它负责的全部尺寸。</CardDescription>
+                <CardDescription className="mt-1">“只看待处理”会同时显示缺母版的项目和已覆盖但还没生成完的项目。</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant={sortMode === 'gain' ? 'default' : 'outline'} onClick={() => setSortMode('gain')}>
-                  按收益排序
+                  按待处理优先
                 </Button>
                 <Button size="sm" variant={sortMode === 'default' ? 'default' : 'outline'} onClick={() => setSortMode('default')}>
                   按编号排序
@@ -661,32 +817,53 @@ export default function BannerMasterWorkbenchView() {
               const isExpanded = expandedGroupId === group.id
               const sizes = getGroupSizes(group, sizeByKey)
               const generatedForGroup = new Set(group.sizes.filter(sizeKey => generatedTargetKeys.has(sizeKey)))
+              const pendingForGroup = source ? group.sizes.filter(sizeKey => !generatedTargetKeys.has(sizeKey)).length : 0
               const riskCounts = getRiskCounts(source, sizes)
               const reviewTotal = riskCounts.review + riskCounts.high
               const gain = gainForGroup(group)
               const matchLabel = source ? getSourceMatchLabel(source, group) : ''
+              const cardClass = source
+                ? pendingForGroup > 0
+                  ? 'border-blue-200 bg-blue-50/30'
+                  : 'border-emerald-200 bg-emerald-50/30'
+                : gain > 0
+                  ? 'border-amber-200 bg-amber-50/20'
+                  : 'border-zinc-200 bg-white'
 
               return (
-                <div key={group.id} className={cn('overflow-hidden rounded-xl border', source ? 'border-emerald-200 bg-emerald-50/30' : 'border-zinc-200 bg-white')}>
+                <div key={group.id} className={cn('overflow-hidden rounded-xl border', cardClass)}>
                   <button
                     type="button"
                     className="flex w-full items-center gap-3 p-3 text-left hover:bg-zinc-50/70"
                     onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
                   >
-                    <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xs font-extrabold', source ? 'border-emerald-300 bg-emerald-100 text-emerald-800' : 'border-zinc-200 bg-zinc-50 text-zinc-600')}>
+                    <div className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-xs font-extrabold',
+                      source
+                        ? pendingForGroup > 0
+                          ? 'border-blue-300 bg-blue-100 text-blue-800'
+                          : 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                        : 'border-zinc-200 bg-zinc-50 text-zinc-600'
+                    )}>
                       {group.code}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="truncate text-sm font-extrabold text-zinc-950">{group.label}</span>
                         {source ? (
-                          <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="mr-1 h-3 w-3" />已有母版</Badge>
+                          pendingForGroup > 0 ? (
+                            <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-800">待生成 {pendingForGroup}</Badge>
+                          ) : (
+                            <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="mr-1 h-3 w-3" />已生成</Badge>
+                          )
+                        ) : gain > 0 ? (
+                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">待补母版 +{gain}</Badge>
                         ) : (
-                          <Badge variant="outline" className="border-zinc-300 text-zinc-500">未完成</Badge>
+                          <Badge variant="outline" className="border-zinc-300 text-zinc-500">可选母版</Badge>
                         )}
                         {source && (
                           reviewTotal > 0 ? (
-                            <Badge variant="outline" className="border-amber-600/30 bg-amber-50 text-amber-800">需复核 {reviewTotal}</Badge>
+                            <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">需复核 {reviewTotal}</Badge>
                           ) : (
                             <Badge variant="outline" className="border-emerald-600/25 bg-emerald-50 text-emerald-700">全部安全</Badge>
                           )
@@ -695,8 +872,8 @@ export default function BannerMasterWorkbenchView() {
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-zinc-500">
                         <span className="font-mono">母版 {group.master}</span>
                         <span>{group.ratioLabel}</span>
-                        <span>覆盖 {group.sizes.length} 个尺寸</span>
-                        {!source && <span className="font-bold text-violet-700">现在做可新增 {gain} 个</span>}
+                        <span>负责 {group.sizes.length} 个尺寸</span>
+                        {!source && gain > 0 && <span className="font-bold text-violet-700">现在做可新增 {gain} 个覆盖</span>}
                         {source && <span className="text-emerald-700">{matchLabel}</span>}
                       </div>
                     </div>
@@ -760,7 +937,7 @@ export default function BannerMasterWorkbenchView() {
                                 <Badge
                                   key={sizeKey}
                                   variant="outline"
-                                  title={source ? `${sizeRisk.label} · 裁切差异约 ${(sizeLoss * 100).toFixed(1)}%${generated ? ' · 已生成' : ' · 未导出'}` : '等待母版'}
+                                  title={source ? `${sizeRisk.label} · 裁切差异约 ${(sizeLoss * 100).toFixed(1)}%${generated ? ' · 已生成' : ' · 待生成'}` : '等待母版'}
                                   className={cn(
                                     'font-mono text-[10px]',
                                     source ? sizeRisk.className : 'border-zinc-200 bg-zinc-50 text-zinc-500',
@@ -784,8 +961,8 @@ export default function BannerMasterWorkbenchView() {
             {visibleGroups.length === 0 && (
               <div className="rounded-xl border border-dashed py-12 text-center">
                 <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
-                <div className="mt-2 text-sm font-extrabold">所有母版都已完成</div>
-                <div className="mt-1 text-xs text-zinc-500">可以直接生成尚未导出的尺寸并出包。</div>
+                <div className="mt-2 text-sm font-extrabold">没有待处理项目</div>
+                <div className="mt-1 text-xs text-zinc-500">全部目标尺寸都已覆盖并生成；复核项仍会在顶部单独统计。</div>
               </div>
             )}
           </CardContent>
@@ -798,10 +975,12 @@ export default function BannerMasterWorkbenchView() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm">已生成结果</CardTitle>
-                <CardDescription>{generatedTargetKeys.size} 个唯一尺寸 · {formatBytes(outputs.reduce((sum, output) => sum + output.blob.size, 0))}</CardDescription>
+                <CardDescription>
+                  {generatedTargetKeys.size}/{totalTargets} 个唯一尺寸 · {generationPercent}% · {formatBytes(outputs.reduce((sum, output) => sum + output.blob.size, 0))}
+                </CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={() => void downloadZip()} disabled={isZipping}>
-                <Download className="mr-1.5 h-3.5 w-3.5" />下载 ZIP
+                <Download className="mr-1.5 h-3.5 w-3.5" />下载当前 ZIP
               </Button>
             </div>
           </CardHeader>
