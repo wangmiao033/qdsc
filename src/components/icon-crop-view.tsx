@@ -82,6 +82,7 @@ const GAME_CHANNEL_SIZES: SizeOption[] = [
   { label: '201x201', width: 201, height: 201, group: '游戏渠道' },
   { label: '200x200', width: 200, height: 200, group: '游戏渠道' },
   { label: '180x180', width: 180, height: 180, group: '游戏渠道' },
+  { label: '175x175', width: 175, height: 175, group: '游戏渠道' },
   { label: '167x167', width: 167, height: 167, group: '游戏渠道' },
   { label: '152x152', width: 152, height: 152, group: '游戏渠道' },
   { label: '144x144', width: 144, height: 144, group: '游戏渠道' },
