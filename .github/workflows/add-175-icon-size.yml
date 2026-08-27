@@ -1,0 +1,55 @@
+name: Add 175x175 icon size
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-175-icon-size.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add 175x175 preset
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/icon-crop-view.tsx')
+          text = path.read_text(encoding='utf-8')
+          needle = "  { label: '180x180', width: 180, height: 180, group: '游戏渠道' },\n"
+          addition = "  { label: '175x175', width: 175, height: 175, group: '游戏渠道' },\n"
+
+          if addition not in text:
+              if needle not in text:
+                  raise SystemExit('Expected GAME_CHANNEL_SIZES insertion point was not found')
+              text = text.replace(needle, needle + addition, 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          if git diff --quiet -- src/components/icon-crop-view.tsx; then
+            echo "175x175 is already present; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/icon-crop-view.tsx
+          git commit -m "feat(icon-crop): add 175x175 game channel size"
+          git push origin HEAD:main
