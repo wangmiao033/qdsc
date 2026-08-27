@@ -1,0 +1,87 @@
+name: Add optional square icon sizes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-optional-square-icon-sizes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add optional square icon group
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/icon-crop-view.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          optional_block = """const OPTIONAL_SQUARE_ICON_SIZES: SizeOption[] = [
+            { label: '216x216', width: 216, height: 216, group: '备选方形 Icon' },
+            { label: '160x160', width: 160, height: 160, group: '备选方形 Icon' },
+            { label: '114x114', width: 114, height: 114, group: '备选方形 Icon' },
+            { label: '100x100', width: 100, height: 100, group: '备选方形 Icon' },
+            { label: '87x87', width: 87, height: 87, group: '备选方形 Icon' },
+            { label: '76x76', width: 76, height: 76, group: '备选方形 Icon' },
+            { label: '60x60', width: 60, height: 60, group: '备选方形 Icon' },
+            { label: '58x58', width: 58, height: 58, group: '备选方形 Icon' },
+            { label: '57x57', width: 57, height: 57, group: '备选方形 Icon' },
+            { label: '40x40', width: 40, height: 40, group: '备选方形 Icon' },
+            { label: '32x32', width: 32, height: 32, group: '备选方形 Icon' },
+          ]
+
+          """
+
+          app_marker = "const APP_ICON_SIZES: SizeOption[] = [\n"
+          if "const OPTIONAL_SQUARE_ICON_SIZES: SizeOption[]" not in text:
+              if app_marker not in text:
+                  raise SystemExit('APP_ICON_SIZES insertion point not found')
+              text = text.replace(app_marker, optional_block + app_marker, 1)
+
+          old_all_sizes = """  const allSizes = useMemo(() =>
+            [...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes, ...specSizes],
+            [customSizes, specSizes]
+          )
+          """
+          new_all_sizes = """  const allSizes = useMemo(() =>
+            [...OPTIONAL_SQUARE_ICON_SIZES, ...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes, ...specSizes],
+            [customSizes, specSizes]
+          )
+          """
+
+          if "...OPTIONAL_SQUARE_ICON_SIZES" not in text:
+              if old_all_sizes not in text:
+                  raise SystemExit('allSizes insertion point not found')
+              text = text.replace(old_all_sizes, new_all_sizes, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          if git diff --quiet -- src/components/icon-crop-view.tsx; then
+            echo "Optional square icon sizes are already present; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/icon-crop-view.tsx
+          git commit -m "feat(icon-crop): add optional square icon sizes"
+          git push origin HEAD:main
