@@ -61,6 +61,20 @@ type ZipStructure = 'byFile' | 'bySize'
 type Rotation = 0 | 90 | 180 | 270
 
 // ========== Preset Sizes ==========
+const OPTIONAL_SQUARE_ICON_SIZES: SizeOption[] = [
+  { label: '216x216', width: 216, height: 216, group: '备选方形 Icon' },
+  { label: '160x160', width: 160, height: 160, group: '备选方形 Icon' },
+  { label: '114x114', width: 114, height: 114, group: '备选方形 Icon' },
+  { label: '100x100', width: 100, height: 100, group: '备选方形 Icon' },
+  { label: '87x87', width: 87, height: 87, group: '备选方形 Icon' },
+  { label: '76x76', width: 76, height: 76, group: '备选方形 Icon' },
+  { label: '60x60', width: 60, height: 60, group: '备选方形 Icon' },
+  { label: '58x58', width: 58, height: 58, group: '备选方形 Icon' },
+  { label: '57x57', width: 57, height: 57, group: '备选方形 Icon' },
+  { label: '40x40', width: 40, height: 40, group: '备选方形 Icon' },
+  { label: '32x32', width: 32, height: 32, group: '备选方形 Icon' },
+]
+
 const APP_ICON_SIZES: SizeOption[] = [
   { label: '1024x1024', width: 1024, height: 1024, group: 'App Icon' },
   { label: '512x512', width: 512, height: 512, group: 'App Icon' },
@@ -606,7 +620,7 @@ export default function IconCropView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const allSizes = useMemo(() =>
-    [...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes, ...specSizes],
+    [...OPTIONAL_SQUARE_ICON_SIZES, ...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes, ...specSizes],
     [customSizes, specSizes]
   )
 
