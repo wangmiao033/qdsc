@@ -32,7 +32,9 @@ export const STORE_SCREENSHOT_SLOTS: StoreScreenshotSlot[] = [
 
 export const STORE_OUTPUT_SIZES: StoreOutputSize[] = [
   { key: '720x405', width: 720, height: 405 },
+  { key: '800x400', width: 800, height: 400 },
   { key: '800x450', width: 800, height: 450 },
+  { key: '800x480', width: 800, height: 480 },
   { key: '960x540', width: 960, height: 540 },
   { key: '1280x720', width: 1280, height: 720 },
   { key: '1600x900', width: 1600, height: 900 },
@@ -158,9 +160,17 @@ export const STORE_SCREENSHOT_MASTERS: StoreScreenshotMaster[] = [
     code: '10',
     master: '1600x960',
     orientation: 'landscape',
-    ratioLabel: '输出 1600x960',
+    ratioLabel: '输出 800x480 / 1600x960',
     label: '1600x960 横版 5:3 母版',
-    sizes: ['1600x960'],
+    sizes: ['800x480', '1600x960'],
+  },
+  {
+    code: '11',
+    master: '800x400',
+    orientation: 'landscape',
+    ratioLabel: '输出 800x400',
+    label: '800x400 横版 2:1 母版',
+    sizes: ['800x400'],
   },
 ]
 
