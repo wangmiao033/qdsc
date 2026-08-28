@@ -125,6 +125,10 @@ const BANNER_SIZES: SizeOption[] = [
   { label: '480x800', width: 480, height: 800, group: 'Banner / 推广图' },
 ]
 
+const CUSTOM_PRESET_SIZES: SizeOption[] = [
+  { label: '300x300', width: 300, height: 300, group: '自定义尺寸' },
+]
+
 // ========== Core Image Processing ==========
 function autoTrimImage(
   imageData: ImageData,
@@ -620,7 +624,7 @@ export default function IconCropView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const allSizes = useMemo(() =>
-    [...OPTIONAL_SQUARE_ICON_SIZES, ...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...customSizes, ...specSizes],
+    [...OPTIONAL_SQUARE_ICON_SIZES, ...APP_ICON_SIZES, ...GAME_CHANNEL_SIZES, ...BANNER_SIZES, ...CUSTOM_PRESET_SIZES, ...customSizes, ...specSizes],
     [customSizes, specSizes]
   )
 
