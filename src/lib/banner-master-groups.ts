@@ -18,8 +18,6 @@ const SQUARE_CARD_SIZE_KEYS = new Set([
   '1200x1200',
   '984x984',
   '600x600',
-  '300x340',
-  '330x250',
   '320x260',
   '300x300',
 ])
@@ -44,14 +42,15 @@ export function matchMasterGroupByRatio(width: number, height: number): MasterGr
   if (width === 1080 && height === 2400) return getMasterGroupById('1080x2400')
 
   const ratio = width / height
-  if (ratio < 0.50) return getMasterGroupById('1080x2400')
-  if (ratio >= 0.50 && ratio < 0.62) return getMasterGroupById('1080x1920')
+  if (ratio < 0.47) return getMasterGroupById('1080x2400')
+  if (ratio < 0.53) return getMasterGroupById('1080x2160')
+  if (ratio < 0.62) return getMasterGroupById('1080x1920')
   if (ratio >= 0.62 && ratio < 0.72) return getMasterGroupById('1080x1600')
   if (ratio >= 0.72 && ratio < 0.86) return getMasterGroupById('1080x1440')
   if (ratio >= 0.86 && ratio < 0.95) return getMasterGroupById('1080x1200')
   if (ratio >= 0.95 && ratio <= 1.08) return getMasterGroupById('1024x1024')
-  if (ratio > 1.08 && ratio < 1.25) return getMasterGroupById('1080x1200')
-  if (ratio >= 1.25 && ratio < 1.45) return getMasterGroupById('1200x900')
+  if (ratio > 1.08 && ratio < 1.24) return getMasterGroupById('1200x1040')
+  if (ratio >= 1.24 && ratio < 1.45) return getMasterGroupById('1200x900')
   if (ratio >= 1.45 && ratio < 1.60) return getMasterGroupById('1500x1000')
   if (ratio >= 1.60 && ratio < 1.90) return getMasterGroupById('1920x1080')
   if (ratio >= 1.90 && ratio < 2.20) return getMasterGroupById('2000x1000')
@@ -59,6 +58,8 @@ export function matchMasterGroupByRatio(width: number, height: number): MasterGr
   if (ratio >= 2.20 && ratio < 2.55) return getMasterGroupById('2400x1000')
   if (ratio >= 3.00 && ratio < 3.75) return getMasterGroupById('m7-a-2000x600')
   if (ratio >= 2.55 && ratio < 3.25) return getMasterGroupById('1920x640')
+  if (ratio >= 6.50 && ratio < 8.20) return getMasterGroupById('1920x270')
+  if (ratio >= 4.20 && ratio < 5.00) return getMasterGroupById('1920x425')
   if (ratio >= 4.80 && ratio < 8.20) return getMasterGroupById('m7-b-2000x360')
   if (ratio >= 3.25 && ratio < 4.20) return getMasterGroupById('1920x500')
   if (ratio >= 4.20) return getMasterGroupById('1920x320')
