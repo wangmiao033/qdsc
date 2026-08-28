@@ -42,7 +42,15 @@ export interface StoreScreenshotOutput {
   name: string
   blob: Blob
   url: string
+  compressed: boolean
+  originalSize: number
 }
+
+export interface StoreOutputCompressionOptions {
+  maxBytes: number
+}
+
+export const STORE_OPTIONAL_MAX_FILE_BYTES = 400 * 1024
 
 function loadImage(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -141,6 +149,53 @@ export function canvasToPngBlob(canvas: HTMLCanvasElement) {
   })
 }
 
+export function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob)
+      else reject(new Error('JPG 编码失败'))
+    }, 'image/jpeg', quality)
+  })
+}
+
+async function encodeStoreScreenshot(
+  canvas: HTMLCanvasElement,
+  compression?: StoreOutputCompressionOptions
+) {
+  const pngBlob = await canvasToPngBlob(canvas)
+  if (!compression || pngBlob.size <= compression.maxBytes) {
+    return {
+      blob: pngBlob,
+      extension: 'png' as const,
+      compressed: false,
+      originalSize: pngBlob.size,
+    }
+  }
+
+  // PNG 没有可控的浏览器质量参数；仅对超限文件改用 JPG，并二分寻找限制内的最高质量。
+  let low = 0.01
+  let high = 0.92
+  let best = await canvasToJpegBlob(canvas, low)
+
+  for (let i = 0; i < 10; i += 1) {
+    const quality = (low + high) / 2
+    const candidate = await canvasToJpegBlob(canvas, quality)
+    if (candidate.size <= compression.maxBytes) {
+      best = candidate
+      low = quality
+    } else {
+      high = quality
+    }
+  }
+
+  return {
+    blob: best,
+    extension: 'jpg' as const,
+    compressed: true,
+    originalSize: pngBlob.size,
+  }
+}
+
 export async function readStoreScreenshotSource(
   slotIndex: number,
   file: File
@@ -167,8 +222,8 @@ export async function readStoreScreenshotSource(
   }
 }
 
-export function buildStoreOutputPath(sizeKey: string, slotFileName: string) {
-  return `${STORE_ZIP_ROOT}/${sizeKey}/${slotFileName}.png`
+export function buildStoreOutputPath(sizeKey: string, slotFileName: string, extension = 'png') {
+  return `${STORE_ZIP_ROOT}/${sizeKey}/${slotFileName}.${extension}`
 }
 
 export type StoreZipPackMode = 'current' | 'all'
@@ -182,7 +237,7 @@ export function buildStoreScreenshotZipFileName(
   if (count === 0) return 'store-screenshot.zip'
 
   if (options.mode === 'all' || !options.master) {
-    return `store-screenshot_全部12尺寸_${count}files.zip`
+    return `store-screenshot_全部${STORE_OUTPUT_SIZES.length}尺寸_${count}files.zip`
   }
 
   const base = getStoreMasterZipBasename(options.master)
@@ -208,7 +263,8 @@ export async function generateStoreScreenshotOutputs(
   sources: StoreScreenshotSource[],
   adjusts: Record<number, StoreCropAdjust>,
   targetSizes: StoreOutputSize[],
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  compression?: StoreOutputCompressionOptions
 ) {
   const outputs: StoreScreenshotOutput[] = []
   let failed = 0
@@ -225,8 +281,9 @@ export async function generateStoreScreenshotOutputs(
     for (const size of targetSizes) {
       try {
         const canvas = drawStoreScreenshotCrop(source.image, size, adjust)
-        const blob = await canvasToPngBlob(canvas)
-        const path = buildStoreOutputPath(size.key, fileStem)
+        const encoded = await encodeStoreScreenshot(canvas, compression)
+        const { blob } = encoded
+        const path = buildStoreOutputPath(size.key, fileStem, encoded.extension)
         const url = URL.createObjectURL(blob)
         outputs.push({
           id: `${source.slotIndex}-${size.key}`,
@@ -235,9 +292,11 @@ export async function generateStoreScreenshotOutputs(
           width: size.width,
           height: size.height,
           path,
-          name: `${fileStem}.png`,
+          name: `${fileStem}.${encoded.extension}`,
           blob,
           url,
+          compressed: encoded.compressed,
+          originalSize: encoded.originalSize,
         })
       } catch {
         failed += 1
@@ -255,9 +314,10 @@ export async function generateStoreScreenshotOutputs(
 export async function generateAllStoreScreenshotOutputs(
   sources: StoreScreenshotSource[],
   adjusts: Record<number, StoreCropAdjust>,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  compression?: StoreOutputCompressionOptions
 ) {
-  return generateStoreScreenshotOutputs(sources, adjusts, STORE_OUTPUT_SIZES, onProgress)
+  return generateStoreScreenshotOutputs(sources, adjusts, STORE_OUTPUT_SIZES, onProgress, compression)
 }
 
 export function formatBytes(bytes: number) {

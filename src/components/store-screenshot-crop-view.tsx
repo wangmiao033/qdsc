@@ -25,6 +25,7 @@ import {
   generateAllStoreScreenshotOutputs,
   generateStoreScreenshotOutputs,
   readStoreScreenshotSource,
+  STORE_OPTIONAL_MAX_FILE_BYTES,
   type StoreCropAdjust,
   type StoreScreenshotOutput,
   type StoreScreenshotSource,
@@ -49,6 +50,7 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 
@@ -166,6 +168,7 @@ export default function StoreScreenshotCropView() {
   const [isReading, setIsReading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isZipping, setIsZipping] = useState(false)
+  const [enableOptionalCompression, setEnableOptionalCompression] = useState(false)
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const batchFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -181,6 +184,7 @@ export default function StoreScreenshotCropView() {
   const activeSource = slots[activeSlot]
   const allReady = uploadedCount === STORE_SLOT_COUNT
   const totalOutputSize = outputs.reduce((sum, output) => sum + output.blob.size, 0)
+  const compressedOutputCount = outputs.filter(output => output.compressed).length
 
   const sourcesList = useMemo(
     () => STORE_SCREENSHOT_SLOTS
@@ -426,6 +430,7 @@ export default function StoreScreenshotCropView() {
     setMasterScope('auto')
     setActiveSizeKey(STORE_SCREENSHOT_MASTERS[0].sizes[0])
     setLastGenerateMode('current')
+    setEnableOptionalCompression(false)
   }
 
   const openPicker = (slotIndex: number) => {
@@ -471,16 +476,29 @@ export default function StoreScreenshotCropView() {
     setIsGenerating(true)
     setLastGenerateMode(mode)
 
+    const compression = enableOptionalCompression
+      ? { maxBytes: STORE_OPTIONAL_MAX_FILE_BYTES }
+      : undefined
+
     const { outputs: nextOutputs, failed } = mode === 'all'
-      ? await generateAllStoreScreenshotOutputs(sourcesList, adjusts, setProgress)
-      : await generateStoreScreenshotOutputs(sourcesList, adjusts, targetSizes, setProgress)
+      ? await generateAllStoreScreenshotOutputs(sourcesList, adjusts, setProgress, compression)
+      : await generateStoreScreenshotOutputs(sourcesList, adjusts, targetSizes, setProgress, compression)
 
     setOutputs(nextOutputs)
     setOutputsStale(false)
     setIsGenerating(false)
 
+    const compressedCount = nextOutputs.filter(output => output.compressed).length
+    const oversizedCount = nextOutputs.filter(output => output.blob.size > STORE_OPTIONAL_MAX_FILE_BYTES).length
+
     if (failed > 0) {
       toast({ title: `完成 ${nextOutputs.length} 张，失败 ${failed} 张`, variant: 'destructive' })
+    } else if (enableOptionalCompression && oversizedCount > 0) {
+      toast({
+        title: `已生成 ${nextOutputs.length} 张，仍有 ${oversizedCount} 张超过 400 KB`,
+        description: '已使用最低 JPG 质量，建议检查这些超大尺寸图片',
+        variant: 'destructive',
+      })
     } else if (nextOutputs.length !== expected) {
       toast({
         title: `已生成 ${nextOutputs.length} 张`,
@@ -491,7 +509,13 @@ export default function StoreScreenshotCropView() {
       const sizeHint = mode === 'all'
         ? `全部 ${STORE_OUTPUT_SIZES.length} 尺寸 × 5 图`
         : `${activeMaster.label} · ${activeMasterSizes.length} 尺寸 × 5 图`
-      toast({ title: `已生成 ${nextOutputs.length} 张`, description: sizeHint })
+      const compressionHint = enableOptionalCompression
+        ? `400 KB 备选压缩：处理 ${compressedCount} 张，其余保持 PNG`
+        : null
+      toast({
+        title: `已生成 ${nextOutputs.length} 张`,
+        description: [sizeHint, compressionHint].filter(Boolean).join(' · '),
+      })
     }
   }
 
@@ -508,10 +532,11 @@ export default function StoreScreenshotCropView() {
     [zipPackOptions]
   )
 
-  const zipFileName = useMemo(
-    () => (outputs.length > 0 ? buildStoreScreenshotZipFileName(outputs, zipPackOptions) : null),
-    [outputs, zipPackOptions]
-  )
+  const zipFileName = useMemo(() => {
+    if (outputs.length === 0) return null
+    const base = buildStoreScreenshotZipFileName(outputs, zipPackOptions)
+    return enableOptionalCompression ? base.replace(/\.zip$/i, '_400KB.zip') : base
+  }, [outputs, zipPackOptions, enableOptionalCompression])
 
   const downloadZip = async () => {
     if (outputs.length === 0 || isZipping) return
@@ -855,6 +880,30 @@ export default function StoreScreenshotCropView() {
 
           <Card className="rounded-xl border border-border/80 shadow-sm">
             <CardContent className="px-4 py-4 space-y-3">
+              <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="store-optional-compression" className="text-xs font-medium">
+                    备选压缩 · 单张 ≤400 KB
+                  </Label>
+                  <Switch
+                    id="store-optional-compression"
+                    checked={enableOptionalCompression}
+                    disabled={isGenerating || isZipping}
+                    onCheckedChange={checked => {
+                      invalidateOutputs()
+                      setEnableOptionalCompression(checked)
+                    }}
+                  />
+                </div>
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  默认关闭；开启后仅把超过 400 KB 的 PNG 转为最高可用质量 JPG，其余图片保持不变。
+                </p>
+                {outputs.length > 0 && enableOptionalCompression && (
+                  <p className="text-[10px] font-medium text-foreground">
+                    本次压缩 {compressedOutputCount} 张 · 其余保持 PNG
+                  </p>
+                )}
+              </div>
               <Button
                 className="w-full h-9 rounded-lg bg-foreground text-background hover:bg-foreground/90"
                 disabled={!allReady || isGenerating || isReading}
@@ -878,7 +927,7 @@ export default function StoreScreenshotCropView() {
               {outputs.length > 0 && (
                 <Button variant="outline" className="w-full h-8 text-xs rounded-lg" disabled={isZipping} onClick={() => void downloadZip()}>
                   {isZipping ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FileArchive className="h-3.5 w-3.5 mr-1" />}
-                  下载 ZIP（{outputs.length} 张 · {formatBytes(totalOutputSize)}）
+                  下载 ZIP（{outputs.length} 张 · {formatBytes(totalOutputSize)}{compressedOutputCount > 0 ? ` · 压缩 ${compressedOutputCount} 张` : ''}）
                 </Button>
               )}
             </CardContent>
