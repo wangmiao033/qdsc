@@ -1,7 +1,22 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Copy, FileImage, Info, RotateCcw, Ruler, Upload, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
+import {
+  Bot,
+  CheckCircle2,
+  Copy,
+  Download,
+  Info,
+  Loader2,
+  PackageCheck,
+  RotateCcw,
+  Ruler,
+  Send,
+  Upload,
+  XCircle,
+} from 'lucide-react'
 
 type JiuyouSpecId = 'splash' | 'popup' | 'banner' | 'feed' | 'tab' | 'egg'
 
@@ -27,6 +42,12 @@ type CheckedFile = {
   height: number
   format: string
   specId: JiuyouSpecId | ''
+}
+
+type QqStatus = {
+  configured: boolean
+  appConfigured: boolean
+  groupConfigured: boolean
 }
 
 const JIUYOU_SPECS: JiuyouSpec[] = [
@@ -133,7 +154,7 @@ function inferSpec(width: number, height: number, fileName: string): JiuyouSpecI
   if (width === 152 && height === 152) return 'egg'
   if (width === 720 && height === 405) {
     if (lower.includes('信息流') || lower.includes('feed')) return 'feed'
-    if (lower.includes('banner') || lower.includes('banner')) return 'banner'
+    if (lower.includes('banner')) return 'banner'
     return ''
   }
   return ''
@@ -180,9 +201,24 @@ function inspect(file: CheckedFile) {
   }
 }
 
+function sanitizeName(name: string) {
+  return name.replace(/[\\/:*?"<>|\r\n]/g, '_').replace(/\s+/g, ' ').trim() || '九游素材包'
+}
+
+function makeTimeStamp() {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`
+}
+
 export default function JiuyouSpecValidator() {
   const [files, setFiles] = useState<CheckedFile[]>([])
   const [dragging, setDragging] = useState(false)
+  const [packageName, setPackageName] = useState('九游素材包')
+  const [packaging, setPackaging] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [qqStatus, setQqStatus] = useState<QqStatus | null>(null)
+  const [deliveryMessage, setDeliveryMessage] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const summary = useMemo(() => {
@@ -194,6 +230,23 @@ export default function JiuyouSpecValidator() {
       pending: results.filter(item => item.status === 'pending').length,
     }
   }, [files])
+
+  const canPackage = summary.total > 0 && summary.pass === summary.total && summary.fail === 0 && summary.pending === 0
+
+  const refreshQqStatus = async () => {
+    try {
+      const response = await fetch('/api/jiuyou/qq-send', { cache: 'no-store' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = await response.json() as QqStatus
+      setQqStatus(data)
+    } catch {
+      setQqStatus({ configured: false, appConfigured: false, groupConfigured: false })
+    }
+  }
+
+  useEffect(() => {
+    void refreshQqStatus()
+  }, [])
 
   const addFiles = async (incoming: FileList | File[]) => {
     const imageFiles = Array.from(incoming).filter(file => file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name))
@@ -210,11 +263,13 @@ export default function JiuyouSpecValidator() {
       } as CheckedFile
     }))
     setFiles(current => [...current, ...checked])
+    setDeliveryMessage('')
   }
 
   const clearAll = () => {
     files.forEach(file => URL.revokeObjectURL(file.url))
     setFiles([])
+    setDeliveryMessage('')
   }
 
   const removeFile = (id: string) => {
@@ -223,6 +278,7 @@ export default function JiuyouSpecValidator() {
       if (target) URL.revokeObjectURL(target.url)
       return current.filter(item => item.id !== id)
     })
+    setDeliveryMessage('')
   }
 
   const copyResult = async () => {
@@ -234,6 +290,92 @@ export default function JiuyouSpecValidator() {
       return `${mark} ${file.file.name}｜${file.width}×${file.height}｜${formatBytes(file.file.size)}｜${spec?.name || '未选择'}｜${detail}`
     })
     await navigator.clipboard.writeText(`【九游规格验收】\n${lines.join('\n')}`)
+    setDeliveryMessage('验收结果已复制')
+  }
+
+  const createZipPackage = async () => {
+    if (!canPackage) throw new Error('还有未通过或未选择用途的图片，不能打包')
+
+    const zip = new JSZip()
+    const manifest: string[] = [
+      '【九游素材验收清单】',
+      `打包时间：${new Date().toLocaleString('zh-CN')}`,
+      `通过数量：${summary.pass}/${summary.total}`,
+      '',
+    ]
+
+    files.forEach((item, index) => {
+      const spec = JIUYOU_SPECS.find(specItem => specItem.id === item.specId)
+      const result = inspect(item)
+      const specName = spec?.name || '未分类'
+      const safeOriginal = sanitizeName(item.file.name)
+      const zipPath = `${String(index + 1).padStart(2, '0')}_${sanitizeName(specName)}_${safeOriginal}`
+      zip.file(zipPath, item.file)
+      manifest.push(`✅ ${specName}｜${item.width}×${item.height}｜${formatBytes(item.file.size)}｜${item.file.name}｜${result.status === 'pass' ? '通过' : result.reasons.join('；')}`)
+    })
+
+    zip.file('九游验收结果.txt', `\uFEFF${manifest.join('\r\n')}`)
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    })
+    const zipName = `${sanitizeName(packageName)}_${makeTimeStamp()}.zip`
+    return { blob, zipName }
+  }
+
+  const downloadPackage = async () => {
+    if (!canPackage) {
+      setDeliveryMessage(`不能打包：不通过 ${summary.fail} 张，待选择用途 ${summary.pending} 张`)
+      return
+    }
+
+    setPackaging(true)
+    setDeliveryMessage('')
+    try {
+      const { blob, zipName } = await createZipPackage()
+      saveAs(blob, zipName)
+      setDeliveryMessage(`已生成 ${zipName}，共 ${summary.pass} 张通过素材`)
+    } catch (error) {
+      setDeliveryMessage(error instanceof Error ? error.message : '打包失败')
+    } finally {
+      setPackaging(false)
+    }
+  }
+
+  const sendPackageToQq = async () => {
+    if (!canPackage) {
+      setDeliveryMessage(`不能发送：不通过 ${summary.fail} 张，待选择用途 ${summary.pending} 张`)
+      return
+    }
+
+    setSending(true)
+    setDeliveryMessage('正在打包并发送到 QQ 群…')
+    try {
+      const { blob, zipName } = await createZipPackage()
+      const formData = new FormData()
+      formData.append('file', new File([blob], zipName, { type: 'application/zip' }))
+      formData.append('packageName', zipName)
+      formData.append('passedCount', String(summary.pass))
+
+      const response = await fetch('/api/jiuyou/qq-send', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json().catch(() => ({})) as { error?: string; missing?: string[]; fileName?: string }
+
+      if (!response.ok) {
+        const missing = Array.isArray(data.missing) && data.missing.length ? `（缺少：${data.missing.join('、')}）` : ''
+        throw new Error(`${data.error || `QQ群发送失败 HTTP ${response.status}`}${missing}`)
+      }
+
+      setDeliveryMessage(`✅ 已自动发送到 QQ 群：${data.fileName || zipName}`)
+      await refreshQqStatus()
+    } catch (error) {
+      setDeliveryMessage(error instanceof Error ? error.message : 'QQ群发送失败')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -244,11 +386,11 @@ export default function JiuyouSpecValidator() {
             <div className="rounded-lg bg-violet-600 p-2 text-white"><Ruler className="h-5 w-5" /></div>
             <div>
               <h1 className="text-xl font-black text-zinc-950">九游规格整理</h1>
-              <p className="mt-0.5 text-xs font-semibold text-zinc-500">严格按像素 1:1 核对 · 尺寸、格式、文件大小三项自动验收</p>
+              <p className="mt-0.5 text-xs font-semibold text-zinc-500">严格按像素 1:1 核对 · 验收通过后可一键打包并自动发到 QQ 群</p>
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={copyResult} disabled={!files.length} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 shadow-sm disabled:opacity-40">
             <Copy className="h-3.5 w-3.5" />复制验收结果
           </button>
@@ -271,6 +413,68 @@ export default function JiuyouSpecValidator() {
           </div>
         ))}
       </div>
+
+      <section className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 to-violet-50 p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-black text-zinc-950">
+              <PackageCheck className="h-4 w-4 text-sky-600" />验收完成 → ZIP 打包 → QQ 群
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-zinc-500">只有全部图片通过后，打包和自动发送按钮才会启用。</div>
+          </div>
+          <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black ${qqStatus?.configured ? 'bg-emerald-100 text-emerald-700' : qqStatus === null ? 'bg-zinc-100 text-zinc-500' : 'bg-amber-100 text-amber-700'}`}>
+            <Bot className="h-3.5 w-3.5" />
+            {qqStatus === null ? '检查 QQ 机器人…' : qqStatus.configured ? 'QQ群自动发送已连接' : 'QQ群自动发送待配置'}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-end">
+          <div>
+            <label className="mb-1 block text-[10px] font-black text-zinc-500">素材包名称</label>
+            <input
+              value={packageName}
+              onChange={event => setPackageName(event.target.value)}
+              placeholder="例如：云上征途_九游素材"
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-800 outline-none focus:border-violet-400"
+            />
+            <div className="mt-1 text-[10px] font-semibold text-zinc-400">系统会自动追加时间戳，并在 ZIP 内附带「九游验收结果.txt」。</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={downloadPackage}
+              disabled={!canPackage || packaging || sending}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 text-xs font-black text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {packaging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              下载 ZIP
+            </button>
+            <button
+              onClick={sendPackageToQq}
+              disabled={!canPackage || packaging || sending || !qqStatus?.configured}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-sky-600 px-4 text-xs font-black text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {sending ? '发送中…' : '打包并发 QQ 群'}
+            </button>
+          </div>
+        </div>
+
+        {!canPackage && files.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-[11px] font-bold text-amber-700">
+            当前还不能打包：不通过 {summary.fail} 张 · 待选择用途 {summary.pending} 张。
+          </div>
+        )}
+        {qqStatus && !qqStatus.configured && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-relaxed text-amber-800">
+            QQ 自动发送代码已就位，但生产环境还缺配置：{!qqStatus.appConfigured ? '机器人 AppID / AppSecret' : ''}{!qqStatus.appConfigured && !qqStatus.groupConfigured ? ' + ' : ''}{!qqStatus.groupConfigured ? '目标群 Group OpenID' : ''}。配置完成后本按钮会自动变为可用。
+          </div>
+        )}
+        {deliveryMessage && (
+          <div className={`mt-3 rounded-lg border px-3 py-2 text-[11px] font-bold ${deliveryMessage.startsWith('✅') || deliveryMessage.includes('已生成') || deliveryMessage.includes('已复制') ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-sky-200 bg-white/80 text-zinc-700'}`}>
+            {deliveryMessage}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-black text-violet-900">
@@ -342,7 +546,10 @@ export default function JiuyouSpecValidator() {
                     <label className="mb-1 block text-[10px] font-black text-zinc-500">核对用途</label>
                     <select
                       value={file.specId}
-                      onChange={event => setFiles(current => current.map(item => item.id === file.id ? { ...item, specId: event.target.value as JiuyouSpecId } : item))}
+                      onChange={event => {
+                        setFiles(current => current.map(item => item.id === file.id ? { ...item, specId: event.target.value as JiuyouSpecId } : item))
+                        setDeliveryMessage('')
+                      }}
                       className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold text-zinc-800 outline-none focus:border-violet-400"
                     >
                       <option value="">请选择用途</option>
