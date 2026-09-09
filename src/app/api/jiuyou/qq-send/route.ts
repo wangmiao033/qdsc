@@ -5,10 +5,11 @@ export const runtime = 'nodejs'
 const QQ_TOKEN_URL = 'https://bots.qq.com/app/getAppAccessToken'
 const QQ_API_BASE = 'https://api.sgroup.qq.com'
 const MAX_ZIP_BYTES = 4 * 1024 * 1024
+const DEFAULT_QQBOT_APP_ID = '1905575806'
 
 function getConfig() {
   return {
-    appId: process.env.QQBOT_APP_ID?.trim() || '',
+    appId: process.env.QQBOT_APP_ID?.trim() || DEFAULT_QQBOT_APP_ID,
     appSecret: process.env.QQBOT_APP_SECRET?.trim() || '',
     groupOpenId: process.env.QQBOT_GROUP_OPENID?.trim() || '',
   }
