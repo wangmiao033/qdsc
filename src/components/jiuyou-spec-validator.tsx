@@ -358,18 +358,32 @@ export default function JiuyouSpecValidator() {
       formData.append('packageName', zipName)
       formData.append('passedCount', String(summary.pass))
 
+      const specNames = [...new Set(files.map(f => JIUYOU_SPECS.find(s => s.id === f.specId)?.name).filter(Boolean))]
+      const notice = `【九游素材】验收已通过，共 ${summary.pass} 张素材（${specNames.join('、')}），素材包「${zipName}」已发到本群，请相关同学查收使用。`
+      formData.append('notice', notice)
+
       const response = await fetch('/api/jiuyou/qq-send', {
         method: 'POST',
         body: formData,
       })
-      const data = await response.json().catch(() => ({})) as { error?: string; missing?: string[]; fileName?: string }
+      const data = await response.json().catch(() => ({})) as {
+        error?: string
+        missing?: string[]
+        fileName?: string
+        noticeSent?: boolean
+        noticeError?: string
+      }
 
       if (!response.ok) {
         const missing = Array.isArray(data.missing) && data.missing.length ? `（缺少：${data.missing.join('、')}）` : ''
         throw new Error(`${data.error || `QQ群发送失败 HTTP ${response.status}`}${missing}`)
       }
 
-      setDeliveryMessage(`✅ 已自动发送到 QQ 群：${data.fileName || zipName}`)
+      if (data.noticeSent) {
+        setDeliveryMessage(`✅ 已自动发送到 QQ 群：${data.fileName || zipName}（含文字通知）`)
+      } else {
+        setDeliveryMessage(`✅ 已自动发送到 QQ 群：${data.fileName || zipName}（⚠️ 文字通知失败：${data.noticeError || '未知错误'}）`)
+      }
       await refreshQqStatus()
     } catch (error) {
       setDeliveryMessage(error instanceof Error ? error.message : 'QQ群发送失败')

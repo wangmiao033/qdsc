@@ -7,6 +7,10 @@ const QQ_API_BASE = 'https://api.sgroup.qq.com'
 const MAX_ZIP_BYTES = 4 * 1024 * 1024
 const DEFAULT_QQBOT_APP_ID = '1905575806'
 
+function buildDefaultNotice(fileName: string) {
+  return `【九游素材】验收已通过，素材包「${fileName}」已发到本群，请相关同学查收使用。`
+}
+
 function getConfig() {
   return {
     appId: process.env.QQBOT_APP_ID?.trim() || DEFAULT_QQBOT_APP_ID,
@@ -43,6 +47,55 @@ async function getAccessToken(appId: string, appSecret: string) {
   return data.access_token
 }
 
+async function sendGroupTextMessage(
+  groupOpenId: string,
+  token: string,
+  content: string
+): Promise<{ ok: boolean; error?: string; traceId?: string }> {
+  try {
+    const response = await fetch(
+      `${QQ_API_BASE}/v2/groups/${encodeURIComponent(groupOpenId)}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `QQBot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          msg_type: 0,
+          content,
+        }),
+        cache: 'no-store',
+      }
+    )
+
+    const responseText = await response.text()
+    let data: Record<string, unknown> = {}
+    try {
+      data = responseText ? JSON.parse(responseText) : {}
+    } catch {
+      // Keep empty object if JSON parse fails.
+    }
+
+    const traceId = response.headers.get('x-tps-trace-id') || undefined
+
+    if (!response.ok) {
+      const message =
+        typeof data.message === 'string'
+          ? data.message
+          : responseText || `HTTP ${response.status}`
+      return { ok: false, error: message, traceId }
+    }
+
+    return { ok: true, traceId }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : '群文本消息发送失败',
+    }
+  }
+}
+
 export async function GET() {
   const config = getConfig()
   return NextResponse.json({
@@ -69,6 +122,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const zip = formData.get('file')
     const packageName = String(formData.get('packageName') || '').trim()
+    const customNotice = String(formData.get('notice') || '').trim()
 
     if (!(zip instanceof File)) {
       return NextResponse.json({ error: '没有收到 ZIP 文件' }, { status: 400 })
@@ -123,6 +177,13 @@ export async function POST(request: NextRequest) {
       }, { status: 502 })
     }
 
+    const noticeContent = customNotice || buildDefaultNotice(fileName)
+    const textResult = await sendGroupTextMessage(
+      config.groupOpenId,
+      token,
+      noticeContent
+    )
+
     return NextResponse.json({
       ok: true,
       sent: true,
@@ -131,6 +192,9 @@ export async function POST(request: NextRequest) {
       fileUuid: typeof qqData.file_uuid === 'string' ? qqData.file_uuid : undefined,
       ttl: typeof qqData.ttl === 'number' ? qqData.ttl : undefined,
       traceId: qqResponse.headers.get('x-tps-trace-id') || undefined,
+      noticeSent: textResult.ok,
+      noticeError: textResult.ok ? undefined : textResult.error,
+      noticeTraceId: textResult.traceId,
     })
   } catch (error) {
     console.error('[jiuyou qq-send]', error)
